@@ -64,6 +64,10 @@
   .mode-label{font-size:12px; font-weight:800; color:var(--ink); grid-column:span 1;}
 
   #progressWrap{display:none;}
+  .spin{display:inline-block; width:12px; height:12px; border:2px solid var(--accent);
+    border-top-color:transparent; border-radius:50%; animation:sp .8s linear infinite;
+    vertical-align:-2px; margin-right:7px;}
+  @keyframes sp{to{transform:rotate(360deg)}}
   .pbar{height:8px; background:#E8EBE6; border-radius:5px; overflow:hidden; margin-top:6px;}
   .pbar > div{height:100%; width:0%; background:var(--accent); transition:width .1s;}
   #progressText{font-size:12.5px; color:var(--sub); font-family:var(--mono);}
@@ -191,7 +195,7 @@
 
   <div id="folderName" style="margin-top:10px;"></div>
   <div id="progressWrap" style="margin-top:10px;">
-    <span id="progressText"></span>
+    <span id="spinner" class="spin" style="display:none;"></span><span id="progressText"></span>
     <div class="pbar"><div id="pfill"></div></div>
   </div>
 </div>
@@ -484,6 +488,17 @@ $('folderInput').addEventListener('change', async e => {
   e.target.value = '';
   if(!all.length) return;
 
+  // 즉시 로딩 표시 (파일 수가 많으면 준비에 몇 초 걸릴 수 있음)
+  analyzing = true;
+  $('btnFolder').disabled = true;
+  const btnOrig = $('btnFolder').textContent;
+  $('btnFolder').textContent = '검사 중...';
+  $('progressWrap').style.display = 'block';
+  $('spinner').style.display = 'inline-block';
+  $('pfill').style.width = '0%';
+  $('progressText').textContent = '파일 목록 읽는 중... (' + all.length + '개 확인)';
+  await new Promise(r => setTimeout(r, 30));   // 로딩 표시를 먼저 화면에 그림
+
   const f2 = parseInt($('from2').value,10), t2 = parseInt($('to2').value,10);
   const f1 = parseInt($('from1').value,10), t1 = parseInt($('to1').value,10);
 
@@ -507,14 +522,16 @@ $('folderInput').addEventListener('change', async e => {
     '전체 ' + all.length + '개 중 검사 대상 ' + targets.length + '개 (1차 ' + n1 + ' · 2차 ' + n2 + ') · 하위폴더 제외';
 
   if(!targets.length){
+    analyzing = false;
+    $('btnFolder').disabled = false;
+    $('btnFolder').textContent = btnOrig;
+    $('spinner').style.display = 'none';
+    $('progressText').textContent = '';
     alert('범위에 해당하는 JPG 파일이 없습니다. 번호 범위를 확인하세요.');
     return;
   }
 
-  analyzing = true;
-  $('btnFolder').disabled = true;
   $('btnExcel').disabled = true;
-  $('progressWrap').style.display = 'block';
   results = [];
 
   const t0 = Date.now();
@@ -538,11 +555,13 @@ $('folderInput').addEventListener('change', async e => {
     const eta = (Date.now()-t0) / done * (targets.length - done);
     $('progressText').textContent = '분석 중... ' + done + ' / ' + targets.length +
       (done >= 5 && done < targets.length ? ' · 남은 예상 시간 ' + fmtETA(eta) : '');
-    if(i % 4 === 3) await new Promise(r => setTimeout(r, 0));
+    if(i % 2 === 1) await new Promise(r => setTimeout(r, 0));
   }
 
   analyzing = false;
   $('btnFolder').disabled = false;
+  $('btnFolder').textContent = btnOrig;
+  $('spinner').style.display = 'none';
   $('btnExcel').disabled = false;
   $('progressText').textContent = '분석 완료 · ' + targets.length + '개 · 소요 ' + fmtETA(Date.now()-t0);
   judge();
