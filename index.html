@@ -105,7 +105,7 @@
 
 <header>
   <h1>HOLE 음영 검사</h1>
-  <span class="tag">V2 · 2단계 판정</span>
+  <span class="tag">V3 · 2단계 판정</span>
   <div class="desc">
     폴더를 선택하면 파일명 끝 번호가 범위 내인 JPG만 검사합니다.<br>
     판정 ① <b>홀 밝기</b>가 기준 미만 → <b>부적합(투과불량)</b> &nbsp; ② 밝기 정상이나 <b>B/G 비율</b>이 기준 미만(녹색빛) → <b>부적합(음영불량)</b>
@@ -215,12 +215,13 @@ function extractNum(name){
 }
 
 /* ==============================================================
-   분석 알고리즘 V2 (파이썬/Node 검증 완료)
-   1) 320px 축소 → 그레이스케일, 테두리 중앙값으로 배경 밝기 추정
-   2) 배경보다 어두운 픽셀 → 연결 성분 분석
-      · 테두리에 닿는 성분(이물·이웃 부품)은 제외
-      · 남은 것 중 최대 성분 = 부품 원판 → 중심(centroid) 산출
-   3) 부품 중심부(반경 0.45re) 안에서 가장 밝은 지점 = HOLE
+   분석 알고리즘 V3 (원형 경계 일관성 탐색 · 11장 검증 완료)
+   1) 320px 축소 → 그레이스케일 + 적분영상(고속 영역평균)
+   2) 부품 탐지: 중앙 영역에서 반경 45~85 후보 원을 훑으며,
+      원 둘레 32개 지점의 (바깥 밝기 − 안쪽 밝기)를 측정.
+      하위 25% 지점까지 양수여야 = 360° 전체가 원형 경계.
+      → 배경 스크래치 무늬, 화면에 걸친 이웃 부품에 영향받지 않음
+   3) 부품 중심 반경 0.5r 안의 최대 밝기 지점 = HOLE
       → 홀이 완전히 어두워도(투과불량) 위치를 놓치지 않음
    4) HOLE r=10 디스크: 밝기 평균 + B/G 비율 측정
 ============================================================== */
@@ -242,69 +243,72 @@ function boxMean(I, W, H, x, y, r){
   return s / ((x1-x0+1)*(y1-y0+1));
 }
 
+const RING_N = 32;
+const RING_COS = [], RING_SIN = [];
+for(let k=0; k<RING_N; k++){
+  RING_COS.push(Math.cos(2*Math.PI*k/RING_N));
+  RING_SIN.push(Math.sin(2*Math.PI*k/RING_N));
+}
+const SCORE_FLOOR = 15;   // 이 점수 미만이면 부품 탐지 실패 → 판정불가
+
 function analyzeCore(data, W, H){
   const N = W*H;
   const gray = new Float32Array(N);
   for(let i=0; i<N; i++){
     gray[i] = 0.299*data[i*4] + 0.587*data[i*4+1] + 0.114*data[i*4+2];
   }
-
-  // 배경 밝기: 테두리 10px 중앙값
-  const bv = [];
-  for(let y=0; y<H; y++){
-    for(let x=0; x<W; x++){
-      if(x<10 || x>=W-10 || y<10 || y>=H-10) bv.push(gray[y*W+x]);
-    }
-  }
-  bv.sort((a,b)=>a-b);
-  const bg = bv[bv.length>>1];
-
-  // 어두운 마스크 + 팽창(r=3, 조각 연결)
-  const dark = new Float32Array(N);
-  for(let i=0; i<N; i++) dark[i] = gray[i] < bg-25 ? 1 : 0;
-  const Id = integralImage(dark, W, H);
-  const dil = new Uint8Array(N);
-  for(let y=0; y<H; y++)
-    for(let x=0; x<W; x++)
-      dil[y*W+x] = boxMean(Id,W,H,x,y,3) > 0 ? 1 : 0;
-
-  // 연결 성분 (BFS)
-  const label = new Int32Array(N);
-  const comps = [];
-  const stack = new Int32Array(N);
-  let nl = 0;
-  for(let s=0; s<N; s++){
-    if(!dil[s] || label[s]) continue;
-    nl++;
-    let top = 0; stack[top++] = s; label[s] = nl;
-    let area=0, sx=0, sy=0, minx=W, maxx=0, miny=H, maxy=0;
-    while(top){
-      const p = stack[--top];
-      const px = p % W, py = (p-px)/W;
-      area++; sx += px; sy += py;
-      if(px<minx)minx=px; if(px>maxx)maxx=px;
-      if(py<miny)miny=py; if(py>maxy)maxy=py;
-      if(px>0     && dil[p-1] && !label[p-1]){ label[p-1]=nl; stack[top++]=p-1; }
-      if(px<W-1   && dil[p+1] && !label[p+1]){ label[p+1]=nl; stack[top++]=p+1; }
-      if(py>0     && dil[p-W] && !label[p-W]){ label[p-W]=nl; stack[top++]=p-W; }
-      if(py<H-1   && dil[p+W] && !label[p+W]){ label[p+W]=nl; stack[top++]=p+W; }
-    }
-    comps.push({area, cx:sx/area, cy:sy/area,
-      touch: minx===0 || miny===0 || maxx===W-1 || maxy===H-1});
-  }
-
-  // 테두리 비접촉 최대 성분 → 없으면 전체 최대 성분
-  let best = null;
-  for(const c of comps) if(!c.touch && c.area>=300 && (!best || c.area>best.area)) best = c;
-  if(!best) for(const c of comps) if(c.area>=300 && (!best || c.area>best.area)) best = c;
-  if(!best) return { found:false, hx:W>>1, hy:H>>1, gmean:0, b:0, g:0, ratio:0 };
-
-  const cx = Math.round(best.cx), cy = Math.round(best.cy);
-  const re = Math.sqrt(best.area/Math.PI);
-
-  // 중심부에서 가장 밝은 지점 = HOLE (박스블러 r=7)
   const Ig = integralImage(gray, W, H);
-  const SR = Math.max(12, Math.round(re*0.45));
+  const ccx = W/2, ccy = H/2;
+  const diffs = new Float64Array(RING_N);
+
+  // 원 둘레 경계 점수: 하위 25% + 평균 0.2
+  function ringScore(x, y, r){
+    for(let k=0; k<RING_N; k++){
+      const ix = (x + RING_COS[k]*(r-8))|0, iy = (y + RING_SIN[k]*(r-8))|0;
+      const ox = (x + RING_COS[k]*(r+8))|0, oy = (y + RING_SIN[k]*(r+8))|0;
+      if(ox<0 || ox>=W || oy<0 || oy>=H) return -1e9;
+      diffs[k] = boxMean(Ig,W,H,ox,oy,3) - boxMean(Ig,W,H,ix,iy,3);
+    }
+    const arr = Array.from(diffs).sort((a,b)=>a-b);
+    let mean = 0; for(const d of arr) mean += d;
+    return arr[8] + 0.2*mean/RING_N;
+  }
+  function candScore(x, y, r){
+    const s = ringScore(x, y, r);
+    return s <= -1e8 ? s : s - 0.1*Math.hypot(x-ccx, y-ccy);
+  }
+
+  // 1차: 거친 격자 탐색
+  let best = -1e18, bx = 0, by = 0, br = 0;
+  const y0 = (H*0.25)|0, y1 = (H*0.75)|0, x0 = (W*0.25)|0, x1 = (W*0.75)|0;
+  for(let r=45; r<=85; r+=5){
+    for(let y=y0; y<=y1; y+=3){
+      if(y-r < 4 || y+r > H-5) continue;
+      for(let x=x0; x<=x1; x+=3){
+        if(x-r < 4 || x+r > W-5) continue;
+        const s = candScore(x, y, r);
+        if(s > best){ best = s; bx = x; by = y; br = r; }
+      }
+    }
+  }
+  if(best < SCORE_FLOOR){
+    return { found:false, hx:W>>1, hy:H>>1, gmean:0, b:0, g:0, ratio:0 };
+  }
+  // 2차: 미세 보정 (±3px, 반경 ±4)
+  for(let r=Math.max(40,br-4); r<=br+4; r++){
+    for(let y=by-3; y<=by+3; y++){
+      if(y-r < 4 || y+r > H-5) continue;
+      for(let x=bx-3; x<=bx+3; x++){
+        if(x-r < 4 || x+r > W-5) continue;
+        const s = candScore(x, y, r);
+        if(s > best){ best = s; bx = x; by = y; br = r; }
+      }
+    }
+  }
+  const cx = bx, cy = by;
+
+  // HOLE: 중심 반경 0.5r 안의 최대 밝기 (박스블러 r=7)
+  const SR = (br*0.5)|0;
   let bestV = -1, hx = cx, hy = cy;
   for(let y=Math.max(0,cy-SR); y<=Math.min(H-1,cy+SR); y++){
     for(let x=Math.max(0,cx-SR); x<=Math.min(W-1,cx+SR); x++){
