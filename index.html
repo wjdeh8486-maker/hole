@@ -183,8 +183,8 @@
     <div class="thres">
       <label>B/G 색상비 (미만 → 음영불량)</label>
       <div class="row">
-        <input type="range" id="thres" min="0.40" max="0.80" step="0.01" value="0.56">
-        <span class="val" id="thresVal">0.56</span>
+        <input type="range" id="thres" min="0.40" max="0.80" step="0.01" value="0.60">
+        <span class="val" id="thresVal">0.60</span>
       </div>
     </div>
   </div>
@@ -260,6 +260,7 @@
 
 let results = [];
 let analyzing = false;
+let folderTitle = '';
 const $ = id => document.getElementById(id);
 
 function extractNum(name){
@@ -499,6 +500,7 @@ $('folderInput').addEventListener('change', async e => {
   targets.sort((a,b) => a.num - b.num);
 
   const folder = all[0].webkitRelativePath ? all[0].webkitRelativePath.split('/')[0] : '';
+  folderTitle = folder;
   const n1 = targets.filter(t=>t.mode===1).length, n2 = targets.length - n1;
   $('folderName').textContent =
     (folder ? '폴더: ' + folder + ' · ' : '') +
@@ -515,6 +517,13 @@ $('folderInput').addEventListener('change', async e => {
   $('progressWrap').style.display = 'block';
   results = [];
 
+  const t0 = Date.now();
+  const fmtETA = ms => {
+    const s = Math.ceil(ms/1000);
+    if(s >= 60) return Math.floor(s/60) + '분 ' + (s%60) + '초';
+    return s + '초';
+  };
+
   for(let i=0; i<targets.length; i++){
     const t = targets[i];
     try{
@@ -525,14 +534,17 @@ $('folderInput').addEventListener('change', async e => {
         found:false, ratio:0, b:0, g:0, gmean:0, dmean:0, darkCnt:0, thumb:'', verdict:'', reason:'' });
     }
     $('pfill').style.width = ((i+1)/targets.length*100).toFixed(1) + '%';
-    $('progressText').textContent = '분석 중... ' + (i+1) + ' / ' + targets.length;
+    const done = i+1;
+    const eta = (Date.now()-t0) / done * (targets.length - done);
+    $('progressText').textContent = '분석 중... ' + done + ' / ' + targets.length +
+      (done >= 5 && done < targets.length ? ' · 남은 예상 시간 ' + fmtETA(eta) : '');
     if(i % 4 === 3) await new Promise(r => setTimeout(r, 0));
   }
 
   analyzing = false;
   $('btnFolder').disabled = false;
   $('btnExcel').disabled = false;
-  $('progressText').textContent = '분석 완료 · ' + targets.length + '개';
+  $('progressText').textContent = '분석 완료 · ' + targets.length + '개 · 소요 ' + fmtETA(Date.now()-t0);
   judge();
 });
 
@@ -751,11 +763,18 @@ async function buildReport(){
 
   const wb = new ExcelJS.Workbook();
 
-  /* ---------- 시트 1: 검사보고서 ---------- */
-  const ws = wb.addWorksheet('검사보고서');
+  /* ---------- 시트 1: 검사보고서 (A4 세로 인쇄 맞춤) ---------- */
+  const ws = wb.addWorksheet('검사보고서', {
+    pageSetup:{
+      paperSize:9, orientation:'portrait',
+      fitToPage:true, fitToWidth:1, fitToHeight:0,
+      horizontalCentered:true,
+      margins:{left:0.35, right:0.35, top:0.5, bottom:0.5, header:0.2, footer:0.2}
+    }
+  });
   ws.columns = [
-    {width:13.5},{width:28},{width:7.5},{width:6.5},
-    {width:8},{width:9},{width:9},{width:15}
+    {width:15},{width:32},{width:8},{width:8},
+    {width:10},{width:10},{width:10},{width:17}
   ];
 
   ws.mergeCells('A1:H1');
@@ -763,49 +782,62 @@ async function buildReport(){
     {font:{size:16, bold:true, color:{argb:'FF0E5E63'}}, align:{horizontal:'center'}, border:false});
   ws.getRow(1).height = 30;
 
-  setCell(ws, 'A3', '검사일시', {font:{bold:true}, fill:'FFEFF3EF'});
-  ws.mergeCells('B3:D3'); setCell(ws, 'B3', dstr);
-  setCell(ws, 'E3', '검사수량', {font:{bold:true}, fill:'FFEFF3EF'});
-  ws.mergeCells('F3:H3');
-  setCell(ws, 'F3', results.length + '개 (1차 ' + n1 + ' · 2차 ' + (results.length-n1) + ')');
+  // 검사 정보
+  setCell(ws, 'A3', '검사폴더', {font:{bold:true}, fill:'FFEFF3EF'});
+  ws.mergeCells('B3:D3'); setCell(ws, 'B3', folderTitle || '-');
+  setCell(ws, 'E3', '검사일시', {font:{bold:true}, fill:'FFEFF3EF'});
+  ws.mergeCells('F3:H3'); setCell(ws, 'F3', dstr);
+  ws.getRow(3).height = 20;
 
-  setCell(ws, 'A4', '1차 기준(역광)', {font:{bold:true}, fill:'FFEFF3EF'});
-  ws.mergeCells('B4:D4');
-  setCell(ws, 'B4', '원판밝기 ' + $('diskMin').value + ' 미만 음영불량 · 이물 ' + $('defectPx').value + 'px 이상 이물');
-  setCell(ws, 'E4', '2차 기준(반사광)', {font:{bold:true}, fill:'FFEFF3EF'});
-  ws.mergeCells('F4:H4');
-  setCell(ws, 'F4', '홀밝기 ' + $('brightMin').value + ' 미만 투과불량 · B/G ' + $('thres').value + ' 미만 음영불량');
+  setCell(ws, 'A4', '검사수량', {font:{bold:true}, fill:'FFEFF3EF'});
+  ws.mergeCells('B4:H4');
+  setCell(ws, 'B4', results.length + '개 (1차 ' + n1 + '개 · 2차 ' + (results.length-n1) + '개)');
+  ws.getRow(4).height = 20;
 
-  ws.mergeCells('A6:H6');
-  setCell(ws, 'A6', '판정 요약', {font:{size:12, bold:true}, border:false});
+  setCell(ws, 'A5', '1차 기준 (역광)', {font:{bold:true}, fill:'FFEFF3EF'});
+  ws.mergeCells('B5:H5');
+  setCell(ws, 'B5', '원판밝기 ' + $('diskMin').value + ' 미만 → 음영불량 · 이물 ' + $('defectPx').value + 'px 이상 → 이물',
+    {align:{wrapText:true}});
+  ws.getRow(5).height = 20;
+
+  setCell(ws, 'A6', '2차 기준 (반사광)', {font:{bold:true}, fill:'FFEFF3EF'});
+  ws.mergeCells('B6:H6');
+  setCell(ws, 'B6', '홀밝기 ' + $('brightMin').value + ' 미만 → 투과불량 · B/G ' + $('thres').value + ' 미만 → 음영불량',
+    {align:{wrapText:true}});
+  ws.getRow(6).height = 20;
+
+  // 판정 요약
+  ws.mergeCells('A8:H8');
+  setCell(ws, 'A8', '판정 요약', {font:{size:12, bold:true}, border:false});
   const heads = ['합격','부적합 계','음영불량','투과불량','이물','판정불가'];
   const vals  = [nPass, nFail, cnt('음영불량'), cnt('투과불량'), cnt('이물'), nWarn];
   for(let i=0; i<6; i++){
-    setCell(ws, ws.getRow(7).getCell(i+1).address, heads[i],
+    setCell(ws, ws.getRow(9).getCell(i+1).address, heads[i],
       {font:{bold:true, color:{argb:'FFFFFFFF'}}, fill:'FF0E5E63', align:{horizontal:'center'}});
-    const c = setCell(ws, ws.getRow(8).getCell(i+1).address, vals[i],
+    const c = setCell(ws, ws.getRow(10).getCell(i+1).address, vals[i],
       {font:{bold:true, size:12}, align:{horizontal:'center'}});
     if(i===0) c.font = Object.assign({}, c.font, {color:{argb:'FF1E7A46'}});
     else if(vals[i] > 0) c.font = Object.assign({}, c.font, {color:{argb:'FFC4372B'}});
   }
-  ws.getRow(7).height = 20; ws.getRow(8).height = 22;
+  ws.getRow(9).height = 20; ws.getRow(10).height = 22;
 
+  // 부적합 LIST (썸네일 포함)
   const ng = results.filter(r => r.verdict !== '합격');
-  ws.mergeCells('A10:H10');
-  setCell(ws, 'A10', '부적합 LIST (' + ng.length + '건)', {font:{size:12, bold:true}, border:false});
+  ws.mergeCells('A12:H12');
+  setCell(ws, 'A12', '부적합 LIST (' + ng.length + '건)', {font:{size:12, bold:true}, border:false});
 
   const listHead = ['검사이미지','파일명','번호','구분','밝기','B/G','이물px','판정'];
-  const hr = ws.getRow(11);
+  const hr = ws.getRow(13);
   listHead.forEach((h,i) => setCell(ws, hr.getCell(i+1).address, h,
     {font:{bold:true, color:{argb:'FFFFFFFF'}}, fill:'FF0E5E63', align:{horizontal:'center'}}));
   hr.height = 20;
 
-  let rowIdx = 12;
+  let rowIdx = 14;
   for(const r of ng){
     const row = ws.getRow(rowIdx);
-    row.height = 56;
+    row.height = 58;
     setCell(ws, row.getCell(1).address, '');
-    setCell(ws, row.getCell(2).address, r.name);
+    setCell(ws, row.getCell(2).address, r.name, {align:{wrapText:true}});
     setCell(ws, row.getCell(3).address, r.num, {align:{horizontal:'center'}});
     setCell(ws, row.getCell(4).address, r.mode + '차', {align:{horizontal:'center'}});
     setCell(ws, row.getCell(5).address,
@@ -817,21 +849,27 @@ async function buildReport(){
     setCell(ws, row.getCell(8).address,
       r.verdict + (r.reason ? ' (' + r.reason + ')' : ''),
       {font:{bold:true, color:{argb: r.verdict==='판정불가' ? 'FF9A6B00' : 'FFC4372B'}},
-       align:{horizontal:'center'}});
+       align:{horizontal:'center', wrapText:true}});
     if(r.thumb){
       const imgId = wb.addImage({base64: r.thumb, extension:'jpeg'});
-      ws.addImage(imgId, {tl:{col:0.08, row:rowIdx-1+0.06}, ext:{width:92, height:69}});
+      ws.addImage(imgId, {tl:{col:0.08, row:rowIdx-1+0.06}, ext:{width:96, height:72}});
     }
     rowIdx++;
   }
   if(!ng.length){
-    ws.mergeCells('A12:H12');
-    setCell(ws, 'A12', '부적합 없음 · 전량 합격', {align:{horizontal:'center'}});
+    ws.mergeCells('A14:H14');
+    setCell(ws, 'A14', '부적합 없음 · 전량 합격', {align:{horizontal:'center'}});
   }
+  // 인쇄 시 매 페이지에 LIST 헤더 반복
+  ws.pageSetup.printTitlesRow = '13:13';
 
   /* ---------- 시트 2: 전체결과 ---------- */
-  const ws2 = wb.addWorksheet('전체결과');
-  ws2.columns = [{width:28},{width:8},{width:6.5},{width:8},{width:9},{width:9},{width:10},{width:12}];
+  const ws2 = wb.addWorksheet('전체결과', {
+    pageSetup:{paperSize:9, orientation:'portrait', fitToPage:true, fitToWidth:1, fitToHeight:0,
+      margins:{left:0.35, right:0.35, top:0.5, bottom:0.5, header:0.2, footer:0.2}}
+  });
+  ws2.columns = [{width:32},{width:9},{width:8},{width:9},{width:10},{width:10},{width:11},{width:13}];
+  ws2.pageSetup.printTitlesRow = '1:1';
   const h2 = ['파일명','번호','구분','밝기','B/G','이물px','판정','사유'];
   h2.forEach((h,i) => setCell(ws2, ws2.getRow(1).getCell(i+1).address, h,
     {font:{bold:true, color:{argb:'FFFFFFFF'}}, fill:'FF0E5E63', align:{horizontal:'center'}}));
