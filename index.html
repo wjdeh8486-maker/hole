@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>HOLE 검사</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <style>
   :root{
     --bg:#F4F5F2; --card:#FFFFFF; --ink:#1C2320; --sub:#6B746F;
@@ -20,10 +20,10 @@
     font-family:'Pretendard','Malgun Gothic','맑은 고딕',sans-serif;
     font-size:14px; padding:16px 20px; margin:0;
   }
-  /* PC 2단 레이아웃: 좌측 = 부적합 LIST, 우측 = 설정/요약/분포 */
+  /* PC 2단 레이아웃: 좌측 = 설정/요약/분포, 우측 = 부적합 LIST */
   .layout{display:flex; gap:16px; align-items:flex-start;}
-  .col-main{flex:1; order:1; min-width:0;}
-  .col-side{flex:0 0 500px; order:2; position:sticky; top:12px;
+  .col-main{flex:1; order:2; min-width:0;}
+  .col-side{flex:0 0 500px; order:1; position:sticky; top:12px;
     max-height:calc(100vh - 24px); overflow-y:auto;}
   @media (max-width:1150px){
     .layout{display:block;}
@@ -708,50 +708,157 @@ $('modalImg').addEventListener('touchend', e => {
   if(Math.abs(dx) > 40) moveModal(dx < 0 ? 1 : -1);
 }, {passive:true});
 
-/* ============ 엑셀 다운로드 ============ */
-$('btnExcel').addEventListener('click', () => {
+/* ============ 엑셀 보고서 다운로드 (썸네일 이미지 포함) ============ */
+$('btnExcel').addEventListener('click', async () => {
   if(!results.length) return;
+  const btn = $('btnExcel');
+  btn.disabled = true;
+  const orig = btn.textContent;
+  btn.textContent = '보고서 생성 중...';
+  try{ await buildReport(); }
+  catch(err){ alert('보고서 생성 실패: ' + err.message); }
+  btn.textContent = orig;
+  btn.disabled = false;
+});
+
+const THIN = {style:'thin', color:{argb:'FFD0D5CF'}};
+const BORDER = {top:THIN, bottom:THIN, left:THIN, right:THIN};
+const FONT = '맑은 고딕';
+
+function setCell(ws, addr, val, opt){
+  const c = ws.getCell(addr);
+  c.value = val;
+  c.font = Object.assign({name:FONT, size:10}, (opt&&opt.font)||{});
+  c.alignment = Object.assign({vertical:'middle'}, (opt&&opt.align)||{});
+  if(opt && opt.fill) c.fill = {type:'pattern', pattern:'solid', fgColor:{argb:opt.fill}};
+  if(!opt || opt.border !== false) c.border = BORDER;
+  return c;
+}
+
+async function buildReport(){
   const now = new Date();
   const pad = n => String(n).padStart(2,'0');
+  const dstr = now.getFullYear() + '-' + pad(now.getMonth()+1) + '-' + pad(now.getDate()) +
+    ' ' + pad(now.getHours()) + ':' + pad(now.getMinutes());
   const stamp = '' + now.getFullYear() + pad(now.getMonth()+1) + pad(now.getDate()) +
     '_' + pad(now.getHours()) + pad(now.getMinutes());
 
   const cnt = re => results.filter(r=>r.reason===re).length;
-  const wb = XLSX.utils.book_new();
+  const nPass = results.filter(r=>r.verdict==='합격').length;
+  const nFail = results.filter(r=>r.verdict==='부적합').length;
+  const nWarn = results.filter(r=>r.verdict==='판정불가').length;
+  const n1 = results.filter(r=>r.mode===1).length;
 
-  const sum = [
-    ['HOLE 검사 결과 (1차+2차 통합)'],
-    ['검사일시', now.getFullYear() + '-' + pad(now.getMonth()+1) + '-' + pad(now.getDate()) +
-      ' ' + pad(now.getHours()) + ':' + pad(now.getMinutes())],
-    ['1차 기준: 원판밝기 / 이물픽셀', $('diskMin').value + ' / ' + $('defectPx').value],
-    ['2차 기준: 홀밝기 / B/G', $('brightMin').value + ' / ' + $('thres').value],
-    [],
-    ['검사 수량', results.length],
-    ['합격', results.filter(r=>r.verdict==='합격').length],
-    ['부적합 (음영불량)', cnt('음영불량')],
-    ['부적합 (투과불량)', cnt('투과불량')],
-    ['부적합 (이물)', cnt('이물')],
-    ['판정불가', results.filter(r=>r.verdict==='판정불가').length],
+  const wb = new ExcelJS.Workbook();
+
+  /* ---------- 시트 1: 검사보고서 ---------- */
+  const ws = wb.addWorksheet('검사보고서');
+  ws.columns = [
+    {width:13.5},{width:28},{width:7.5},{width:6.5},
+    {width:8},{width:9},{width:9},{width:15}
   ];
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(sum), '요약');
 
-  const header = ['파일명','번호','구분','밝기','B/G','이물px','판정','사유'];
-  const row = r => [r.name, r.num, r.mode + '차',
-    r.mode===2 ? Math.round(r.gmean) : Math.round(r.dmean),
-    r.mode===2 ? Number(r.ratio.toFixed(3)) : '',
-    r.mode===1 ? r.darkCnt : '',
-    r.verdict, r.reason];
-  const ws1 = XLSX.utils.aoa_to_sheet([header, ...results.map(row)]);
-  ws1['!cols'] = [{wch:28},{wch:8},{wch:6},{wch:7},{wch:8},{wch:8},{wch:10},{wch:12}];
-  XLSX.utils.book_append_sheet(wb, ws1, '전체결과');
+  ws.mergeCells('A1:H1');
+  setCell(ws, 'A1', 'HOLE 검사 결과 보고서',
+    {font:{size:16, bold:true, color:{argb:'FF0E5E63'}}, align:{horizontal:'center'}, border:false});
+  ws.getRow(1).height = 30;
+
+  setCell(ws, 'A3', '검사일시', {font:{bold:true}, fill:'FFEFF3EF'});
+  ws.mergeCells('B3:D3'); setCell(ws, 'B3', dstr);
+  setCell(ws, 'E3', '검사수량', {font:{bold:true}, fill:'FFEFF3EF'});
+  ws.mergeCells('F3:H3');
+  setCell(ws, 'F3', results.length + '개 (1차 ' + n1 + ' · 2차 ' + (results.length-n1) + ')');
+
+  setCell(ws, 'A4', '1차 기준(역광)', {font:{bold:true}, fill:'FFEFF3EF'});
+  ws.mergeCells('B4:D4');
+  setCell(ws, 'B4', '원판밝기 ' + $('diskMin').value + ' 미만 음영불량 · 이물 ' + $('defectPx').value + 'px 이상 이물');
+  setCell(ws, 'E4', '2차 기준(반사광)', {font:{bold:true}, fill:'FFEFF3EF'});
+  ws.mergeCells('F4:H4');
+  setCell(ws, 'F4', '홀밝기 ' + $('brightMin').value + ' 미만 투과불량 · B/G ' + $('thres').value + ' 미만 음영불량');
+
+  ws.mergeCells('A6:H6');
+  setCell(ws, 'A6', '판정 요약', {font:{size:12, bold:true}, border:false});
+  const heads = ['합격','부적합 계','음영불량','투과불량','이물','판정불가'];
+  const vals  = [nPass, nFail, cnt('음영불량'), cnt('투과불량'), cnt('이물'), nWarn];
+  for(let i=0; i<6; i++){
+    setCell(ws, ws.getRow(7).getCell(i+1).address, heads[i],
+      {font:{bold:true, color:{argb:'FFFFFFFF'}}, fill:'FF0E5E63', align:{horizontal:'center'}});
+    const c = setCell(ws, ws.getRow(8).getCell(i+1).address, vals[i],
+      {font:{bold:true, size:12}, align:{horizontal:'center'}});
+    if(i===0) c.font = Object.assign({}, c.font, {color:{argb:'FF1E7A46'}});
+    else if(vals[i] > 0) c.font = Object.assign({}, c.font, {color:{argb:'FFC4372B'}});
+  }
+  ws.getRow(7).height = 20; ws.getRow(8).height = 22;
 
   const ng = results.filter(r => r.verdict !== '합격');
-  const ws2 = XLSX.utils.aoa_to_sheet([header, ...ng.map(row)]);
-  ws2['!cols'] = ws1['!cols'];
-  XLSX.utils.book_append_sheet(wb, ws2, '부적합LIST');
+  ws.mergeCells('A10:H10');
+  setCell(ws, 'A10', '부적합 LIST (' + ng.length + '건)', {font:{size:12, bold:true}, border:false});
 
-  XLSX.writeFile(wb, 'HOLE검사결과_' + stamp + '.xlsx');
-});
+  const listHead = ['검사이미지','파일명','번호','구분','밝기','B/G','이물px','판정'];
+  const hr = ws.getRow(11);
+  listHead.forEach((h,i) => setCell(ws, hr.getCell(i+1).address, h,
+    {font:{bold:true, color:{argb:'FFFFFFFF'}}, fill:'FF0E5E63', align:{horizontal:'center'}}));
+  hr.height = 20;
+
+  let rowIdx = 12;
+  for(const r of ng){
+    const row = ws.getRow(rowIdx);
+    row.height = 56;
+    setCell(ws, row.getCell(1).address, '');
+    setCell(ws, row.getCell(2).address, r.name);
+    setCell(ws, row.getCell(3).address, r.num, {align:{horizontal:'center'}});
+    setCell(ws, row.getCell(4).address, r.mode + '차', {align:{horizontal:'center'}});
+    setCell(ws, row.getCell(5).address,
+      r.found ? Math.round(r.mode===2 ? r.gmean : r.dmean) : '', {align:{horizontal:'center'}});
+    setCell(ws, row.getCell(6).address,
+      r.mode===2 && r.found ? Number(r.ratio.toFixed(3)) : '', {align:{horizontal:'center'}});
+    setCell(ws, row.getCell(7).address,
+      r.mode===1 && r.found ? r.darkCnt : '', {align:{horizontal:'center'}});
+    setCell(ws, row.getCell(8).address,
+      r.verdict + (r.reason ? ' (' + r.reason + ')' : ''),
+      {font:{bold:true, color:{argb: r.verdict==='판정불가' ? 'FF9A6B00' : 'FFC4372B'}},
+       align:{horizontal:'center'}});
+    if(r.thumb){
+      const imgId = wb.addImage({base64: r.thumb, extension:'jpeg'});
+      ws.addImage(imgId, {tl:{col:0.08, row:rowIdx-1+0.06}, ext:{width:92, height:69}});
+    }
+    rowIdx++;
+  }
+  if(!ng.length){
+    ws.mergeCells('A12:H12');
+    setCell(ws, 'A12', '부적합 없음 · 전량 합격', {align:{horizontal:'center'}});
+  }
+
+  /* ---------- 시트 2: 전체결과 ---------- */
+  const ws2 = wb.addWorksheet('전체결과');
+  ws2.columns = [{width:28},{width:8},{width:6.5},{width:8},{width:9},{width:9},{width:10},{width:12}];
+  const h2 = ['파일명','번호','구분','밝기','B/G','이물px','판정','사유'];
+  h2.forEach((h,i) => setCell(ws2, ws2.getRow(1).getCell(i+1).address, h,
+    {font:{bold:true, color:{argb:'FFFFFFFF'}}, fill:'FF0E5E63', align:{horizontal:'center'}}));
+  let ri = 2;
+  for(const r of results){
+    const row = ws2.getRow(ri++);
+    const vals2 = [r.name, r.num, r.mode + '차',
+      r.found ? Math.round(r.mode===2 ? r.gmean : r.dmean) : '',
+      r.mode===2 && r.found ? Number(r.ratio.toFixed(3)) : '',
+      r.mode===1 && r.found ? r.darkCnt : '',
+      r.verdict, r.reason];
+    vals2.forEach((v,i) => {
+      const c = setCell(ws2, row.getCell(i+1).address, v,
+        i>=1 && i<=6 ? {align:{horizontal:'center'}} : undefined);
+      if(i===6 && v!=='합격') c.font = Object.assign({}, c.font,
+        {color:{argb: v==='판정불가' ? 'FF9A6B00' : 'FFC4372B'}});
+    });
+  }
+
+  const buf = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buf], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'HOLE검사보고서_' + stamp + '.xlsx';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
 </script>
 </body>
 </html>
