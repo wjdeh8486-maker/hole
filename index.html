@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>HOLE 검사</title>
+<title>HOLE 형상 검사</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <style>
   :root{
@@ -20,7 +20,6 @@
     font-family:'Pretendard','Malgun Gothic','맑은 고딕',sans-serif;
     font-size:14px; padding:16px 20px; margin:0;
   }
-  /* PC 2단 레이아웃: 좌측 = 설정/요약/분포, 우측 = 부적합 LIST */
   .layout{display:flex; gap:16px; align-items:flex-start;}
   .col-main{flex:1; order:2; min-width:0;}
   .col-side{flex:0 0 500px; order:1; position:sticky; top:12px;
@@ -60,7 +59,7 @@
   .thres label{font-size:11.5px; color:var(--sub); font-weight:600;}
   .thres .row{display:flex; align-items:center; gap:10px;}
   .thres input[type=range]{flex:1; accent-color:var(--accent);}
-  .thres .val{font-family:var(--mono); font-size:14.5px; font-weight:700; color:var(--accent); width:44px;}
+  .thres .val{font-family:var(--mono); font-size:14.5px; font-weight:700; color:var(--accent); width:48px;}
   .mode-label{font-size:12px; font-weight:800; color:var(--ink); grid-column:span 1;}
 
   #progressWrap{display:none;}
@@ -123,12 +122,12 @@
 <body>
 
 <header>
-  <h1>HOLE 검사</h1>
-  <span class="tag">V4 · 1차+2차 통합</span>
+  <h1>HOLE 형상 & 에지 정밀 검사</h1>
+  <span class="tag">V5 · 형상 정밀 측정</span>
   <div class="desc">
-    폴더를 선택하면 파일명 끝 번호에 따라 자동으로 검사가 나뉩니다.<br>
-    <b>1차 (역광 · 13~1461)</b>: 원판 밝기 미달 → 음영불량 / 원판 내 어두운 점 → 이물 &nbsp;·&nbsp;
-    <b>2차 (반사광 · 1472~2650)</b>: 홀 밝기 미달 → 투과불량 / B/G 비율 미달(녹색빛) → 음영불량
+    홀 테두리 윤곽선의 <b>진원도(Circularity)</b>, <b>에지 일그러짐(Roughness)</b>, <b>이빠짐(Chip)</b> 및 <b>버(Burr)</b>를 정밀 측정하여 자동 판정합니다.<br>
+    <b>1차</b>: 진원도 미달 → 찌그러짐 / 에지 거칠음 초과 → 윤곽불량 &nbsp;·&nbsp;
+    <b>2차</b>: 이빠짐 깊이 초과 → 함몰/크랙 / Burr 높이 초과 → 버 발생
   </div>
 </header>
 
@@ -143,13 +142,13 @@
       <input type="file" id="folderInput" webkitdirectory multiple>
     </div>
     <div class="field">
-      <label>1차 번호 범위 (역광)</label>
+      <label>1차 번호 범위 (기본 검사)</label>
       <div class="pair">
         <input type="number" id="from2" value="13"> ~ <input type="number" id="to2" value="1461">
       </div>
     </div>
     <div class="field">
-      <label>2차 번호 범위 (반사광)</label>
+      <label>2차 번호 범위 (정밀 검사)</label>
       <div class="pair">
         <input type="number" id="from1" value="1472"> ~ <input type="number" id="to1" value="2650">
       </div>
@@ -161,34 +160,35 @@
   </div>
 
   <div class="thres-grid">
-    <div class="mode-label">1차 (역광) 기준</div>
-    <div class="mode-label">2차 (반사광) 기준</div>
+    <div class="mode-label">1차 형상 기준</div>
+    <div class="mode-label">2차 에지 기준</div>
+    
     <div class="thres">
-      <label>원판 밝기 (미만 → 음영불량)</label>
+      <label>진원도 (미만 → 찌그러짐)</label>
       <div class="row">
-        <input type="range" id="diskMin" min="150" max="250" step="1" value="225">
-        <span class="val" id="diskMinVal">225</span>
+        <input type="range" id="roundMin" min="0.50" max="0.98" step="0.01" value="0.82">
+        <span class="val" id="roundMinVal">0.82</span>
       </div>
     </div>
     <div class="thres">
-      <label>홀 밝기 (미만 → 투과불량)</label>
+      <label>이빠짐 깊이 px (이상 → 함몰)</label>
       <div class="row">
-        <input type="range" id="brightMin" min="100" max="240" step="1" value="200">
-        <span class="val" id="brightVal">200</span>
+        <input type="range" id="chipMax" min="1.0" max="15.0" step="0.5" value="4.5">
+        <span class="val" id="chipMaxVal">4.5</span>
       </div>
     </div>
     <div class="thres">
-      <label>이물 픽셀 수 (이상 → 이물)</label>
+      <label>에지 거칠음 px (이상 → 윤곽불량)</label>
       <div class="row">
-        <input type="range" id="defectPx" min="3" max="60" step="1" value="10">
-        <span class="val" id="defectPxVal">10</span>
+        <input type="range" id="roughMax" min="0.5" max="10.0" step="0.5" value="3.0">
+        <span class="val" id="roughMaxVal">3.0</span>
       </div>
     </div>
     <div class="thres">
-      <label>B/G 색상비 (미만 → 음영불량)</label>
+      <label>Burr 높이 px (이상 → 버발생)</label>
       <div class="row">
-        <input type="range" id="thres" min="0.40" max="0.80" step="0.01" value="0.56">
-        <span class="val" id="thresVal">0.56</span>
+        <input type="range" id="burrMax" min="1.0" max="15.0" step="0.5" value="5.0">
+        <span class="val" id="burrMaxVal">5.0</span>
       </div>
     </div>
   </div>
@@ -214,13 +214,12 @@
 </div>
 
 <div class="card" id="distCard">
-  <h3>2차 B/G 비율 분포</h3>
+  <h3>진원도(Circularity) 분포</h3>
   <canvas id="distCanvas"></canvas>
   <div class="dist-note">
     <span class="dot" style="background:#1E7A46"></span>합격 &nbsp;
-    <span class="dot" style="background:#C4372B"></span>음영불량 &nbsp;
-    <span class="dot" style="background:#5B4FA8"></span>투과불량 &nbsp;·&nbsp; 세로선 = B/G 기준 (2차 파일만 표시).
-    슬라이더 조정 시 재검사 없이 즉시 재판정됩니다.
+    <span class="dot" style="background:#C4372B"></span>형상/에지 불량 &nbsp;·&nbsp; 세로선 = 진원도 기준.
+    슬라이더 조정 시 즉시 재판정됩니다.
   </div>
 </div>
 
@@ -234,7 +233,7 @@
   </div>
   <div style="overflow-x:auto;">
     <table>
-      <thead><tr><th>썸네일</th><th>파일명</th><th>번호</th><th>구분</th><th>측정값</th><th>판정</th></tr></thead>
+      <thead><tr><th>썸네일</th><th>파일명</th><th>번호</th><th>구분</th><th>측정값 (진원도/깊이/버)</th><th>판정</th></tr></thead>
       <tbody id="listBody"></tbody>
     </table>
   </div>
@@ -272,26 +271,6 @@ function extractNum(name){
   return m ? parseInt(m[1], 10) : null;
 }
 
-/* ==============================================================
-   공용: 적분영상 고속 영역평균
-============================================================== */
-function integralImage(g, W, H){
-  const I = new Float64Array((W+1)*(H+1));
-  for(let y=0; y<H; y++){
-    let row = 0;
-    for(let x=0; x<W; x++){
-      row += g[y*W+x];
-      I[(y+1)*(W+1)+x+1] = I[y*(W+1)+x+1] + row;
-    }
-  }
-  return I;
-}
-function boxMean(I, W, H, x, y, r){
-  const x0=Math.max(0,x-r), x1=Math.min(W-1,x+r);
-  const y0=Math.max(0,y-r), y1=Math.min(H-1,y+r);
-  const s = I[(y1+1)*(W+1)+x1+1] - I[y0*(W+1)+x1+1] - I[(y1+1)*(W+1)+x0] + I[y0*(W+1)+x0];
-  return s / ((x1-x0+1)*(y1-y0+1));
-}
 function toGray(data, W, H){
   const gray = new Float32Array(W*H);
   for(let i=0; i<W*H; i++){
@@ -301,165 +280,107 @@ function toGray(data, W, H){
 }
 
 /* ==============================================================
-   2차 (반사광) 알고리즘: 원형 경계 일관성 탐색 · 11장 검증 완료
-   원 둘레 32개 지점의 (바깥 밝기 − 안쪽 밝기) 하위 25%까지
-   양수여야 = 360° 전체가 원형 경계인 부품만 선택.
-   홀은 부품 중심 0.5r 안의 최대 밝기 지점 → 어두운 홀도 탐지.
+   정밀 홀 형상 및 에지 분석 알고리즘 (360도 반경 레이캐스팅)
 ============================================================== */
-const RING_N = 32;
-const RING_COS = [], RING_SIN = [];
-for(let k=0; k<RING_N; k++){
-  RING_COS.push(Math.cos(2*Math.PI*k/RING_N));
-  RING_SIN.push(Math.sin(2*Math.PI*k/RING_N));
-}
-const SCORE_FLOOR = 15;
-
-function analyzeReflect(data, W, H){
-  const gray = toGray(data, W, H);
-  const Ig = integralImage(gray, W, H);
-  const ccx = W/2, ccy = H/2;
-  const diffs = new Float64Array(RING_N);
-
-  function ringScore(x, y, r){
-    for(let k=0; k<RING_N; k++){
-      const ix = (x + RING_COS[k]*(r-8))|0, iy = (y + RING_SIN[k]*(r-8))|0;
-      const ox = (x + RING_COS[k]*(r+8))|0, oy = (y + RING_SIN[k]*(r+8))|0;
-      if(ox<0 || ox>=W || oy<0 || oy>=H) return -1e9;
-      diffs[k] = boxMean(Ig,W,H,ox,oy,3) - boxMean(Ig,W,H,ix,iy,3);
-    }
-    const arr = Array.from(diffs).sort((a,b)=>a-b);
-    let mean = 0; for(const d of arr) mean += d;
-    return arr[8] + 0.2*mean/RING_N;
-  }
-  function candScore(x, y, r){
-    const s = ringScore(x, y, r);
-    return s <= -1e8 ? s : s - 0.1*Math.hypot(x-ccx, y-ccy);
-  }
-
-  let best = -1e18, bx = 0, by = 0, br = 0;
-  const y0 = (H*0.25)|0, y1 = (H*0.75)|0, x0 = (W*0.25)|0, x1 = (W*0.75)|0;
-  for(let r=45; r<=85; r+=5){
-    for(let y=y0; y<=y1; y+=3){
-      if(y-r < 4 || y+r > H-5) continue;
-      for(let x=x0; x<=x1; x+=3){
-        if(x-r < 4 || x+r > W-5) continue;
-        const s = candScore(x, y, r);
-        if(s > best){ best = s; bx = x; by = y; br = r; }
-      }
-    }
-  }
-  if(best < SCORE_FLOOR){
-   return {
-    found:false,
-    cx:W>>1,
-    cy:H>>1,
-
-    radiusMean:0,
-    radiusRange:0,
-
-    chipDepth:0,
-    burrHeight:0
-};
-  }
-  for(let r=Math.max(40,br-4); r<=br+4; r++){
-    for(let y=by-3; y<=by+3; y++){
-      if(y-r < 4 || y+r > H-5) continue;
-      for(let x=bx-3; x<=bx+3; x++){
-        if(x-r < 4 || x+r > W-5) continue;
-        const s = candScore(x, y, r);
-        if(s > best){ best = s; bx = x; by = y; br = r; }
-      }
-    }
-  }
-  const cx = bx, cy = by;
-
-  const SR = (br*0.5)|0;
-  let bestV = -1, hx = cx, hy = cy;
-  for(let y=Math.max(0,cy-SR); y<=Math.min(H-1,cy+SR); y++){
-    for(let x=Math.max(0,cx-SR); x<=Math.min(W-1,cx+SR); x++){
-      if((x-cx)*(x-cx)+(y-cy)*(y-cy) > SR*SR) continue;
-      const v = boxMean(Ig,W,H,x,y,7);
-      if(v > bestV){ bestV = v; hx = x; hy = y; }
-    }
-  }
-
-  let sb=0, sg=0, sgr=0, cnt=0;
-  const R = 10;
-  for(let dy=-R; dy<=R; dy++){
-    for(let dx=-R; dx<=R; dx++){
-      if(dx*dx+dy*dy > R*R) continue;
-      const x2=hx+dx, y2=hy+dy;
-      if(x2<0||x2>=W||y2<0||y2>=H) continue;
-      const o = (y2*W+x2)*4;
-      sg += data[o+1]; sb += data[o+2]; sgr += gray[y2*W+x2]; cnt++;
-    }
-  }
-  const g = sg/cnt, b = sb/cnt;
-  return {
-    found:true,
-    cx,
-    cy,
-
-    radiusMean,
-    radiusRange,
-
-    chipDepth,
-    burrHeight
-};
+const NUM_ANGLES = 72; // 5도 간격으로 72개 정밀 측정
+const COS_A = [], SIN_A = [];
+for(let i=0; i<NUM_ANGLES; i++){
+  const rad = (i * 360 / NUM_ANGLES) * Math.PI / 180;
+  COS_A.push(Math.cos(rad));
+  SIN_A.push(Math.sin(rad));
 }
 
-/* ==============================================================
-   1차 (역광) 알고리즘: 밝은 원판 분석 · 4장 검증 완료
-   1) 밝기 100 초과 픽셀 → 원판 중심·반경 산출
-   2) 원판 내부(테두리 2px 제외)의 평균 밝기 → 음영불량 판정
-   3) 내부에서 중앙값의 72% 미만 어두운 픽셀 수 → 이물 판정
-      (이물 위치 = 어두운 픽셀들의 무게중심, 썸네일 마커 표시)
-============================================================== */
-function analyzeBacklight(data, W, H){
+function analyzeHoleShape(data, W, H){
   const gray = toGray(data, W, H);
-  const N = W*H;
+  
+  // 1. 홀 마스크 및 중심점(Center of Mass) 구하기
+  // 밝은 홀/어두운 원판 또는 어두운 홀을 대비차로 탐지
+  let sumX = 0, sumY = 0, cnt = 0;
+  let minG = 255, maxG = 0;
+  for(let i=0; i<W*H; i++){
+    if(gray[i] < minG) minG = gray[i];
+    if(gray[i] > maxG) maxG = gray[i];
+  }
+  const midTh = (minG + maxG) / 2;
 
-  let area=0, sx=0, sy=0;
+  // 홀 픽셀 이진화 (보통 홀 영역 내부가 원판과 확실한 대비를 이룸)
+  const isHoleBright = gray[(H/2|0)*W + (W/2|0)] > midTh;
+  
   for(let y=0; y<H; y++){
     for(let x=0; x<W; x++){
-      if(gray[y*W+x] > 100){ area++; sx+=x; sy+=y; }
+      const val = gray[y*W+x];
+      const isInner = isHoleBright ? (val > midTh) : (val < midTh);
+      if(isInner){
+        sumX += x; sumY += y; cnt++;
+      }
     }
   }
-  if(area < 800){
-    return { found:false, dmean:0, darkCnt:0, cx:W>>1, cy:H>>1, re:0, dcx:0, dcy:0 };
-  }
-  const cx = sx/area, cy = sy/area;
-  const re = Math.sqrt(area/Math.PI);
-  const r2 = (re-2)*(re-2);
 
-  // 1패스: 내부 히스토그램 + 평균
-  const hist = new Int32Array(256);
-  let sum=0, cnt=0;
-  const yA = Math.max(0, Math.floor(cy-re)), yB = Math.min(H-1, Math.ceil(cy+re));
-  const xA = Math.max(0, Math.floor(cx-re)), xB = Math.min(W-1, Math.ceil(cx+re));
-  for(let y=yA; y<=yB; y++){
-    for(let x=xA; x<=xB; x++){
-      if((x-cx)*(x-cx)+(y-cy)*(y-cy) > r2) continue;
-      const v = gray[y*W+x];
-      hist[v|0]++; sum += v; cnt++;
-    }
+  if(cnt < 100){
+    return { found:false, cx:W>>1, cy:H>>1, roundness:0, roughness:0, chipDepth:0, burrHeight:0, edgePts:[] };
   }
-  let acc=0, med=0;
-  for(let v=0; v<256; v++){ acc += hist[v]; if(acc >= cnt/2){ med = v; break; } }
-  const dmean = sum/cnt;
 
-  // 2패스: 어두운 결함 픽셀 수 + 무게중심
-  const darkTh = med*0.72;
-  let darkCnt=0, dsx=0, dsy=0;
-  for(let y=yA; y<=yB; y++){
-    for(let x=xA; x<=xB; x++){
-      if((x-cx)*(x-cx)+(y-cy)*(y-cy) > r2) continue;
-      if(gray[y*W+x] < darkTh){ darkCnt++; dsx+=x; dsy+=y; }
+  const cx = sumX / cnt;
+  const cy = sumY / cnt;
+
+  // 2. 360도 방향으로 Edge Point(경계점) 탐색
+  const radii = [];
+  const edgePts = [];
+
+  for(let a=0; a<NUM_ANGLES; a++){
+    const dx = COS_A[a];
+    const dy = SIN_A[a];
+    let edgeR = 0;
+
+    // 중심에서부터 밖으로 스캔
+    for(let r=3; r<Math.min(W, H)/2; r++){
+      const px = Math.round(cx + dx * r);
+      const py = Math.round(cy + dy * r);
+      if(px < 1 || px >= W-1 || py < 1 || py >= H-1) { edgeR = r; break; }
+
+      // 경계 기울기(Gradient) 계산
+      const curr = gray[py*W + px];
+      const next = gray[Math.round(cy + dy*(r+2))*W + Math.round(cx + dx*(r+2))];
+      if(Math.abs(curr - next) > (maxG - minG) * 0.25){
+        edgeR = r;
+        break;
+      }
     }
+    if(edgeR === 0) edgeR = 20; // fallback
+    radii.push(edgeR);
+    edgePts.push({x: cx + dx*edgeR, y: cy + dy*edgeR});
   }
-  const dcx = darkCnt ? dsx/darkCnt : cx;
-  const dcy = darkCnt ? dsy/darkCnt : cy;
-  return { found:true, dmean, darkCnt, cx, cy, re, dcx, dcy };
+
+  // 3. 형상 측정 지표 산출
+  let rSum = 0;
+  for(const r of radii) rSum += r;
+  const rMean = rSum / NUM_ANGLES;
+
+  let varianceSum = 0;
+  let maxChip = 0;  // 함몰 (평균보다 반경이 작음)
+  let maxBurr = 0;  // 버 (평균보다 반경이 큼)
+
+  for(const r of radii){
+    const diff = r - rMean;
+    varianceSum += diff * diff;
+    if(diff < 0 && Math.abs(diff) > maxChip) maxChip = Math.abs(diff);
+    if(diff > 0 && diff > maxBurr) maxBurr = diff;
+  }
+
+  const roughness = Math.sqrt(varianceSum / NUM_ANGLES); // 에지 편차 (Roughness)
+  
+  // 진원도 (Circularity) = 1 - (반경 표준편차 / 평균반경)
+  const roundness = Math.max(0, Math.min(1.0, 1.0 - (roughness / rMean)));
+
+  return {
+    found: true,
+    cx, cy, rMean,
+    roundness,
+    roughness,
+    chipDepth: maxChip,
+    burrHeight: maxBurr,
+    edgePts
+  };
 }
 
 /* ============ 파일 분석 ============ */
@@ -471,28 +392,29 @@ async function analyzeFile(file, mode){
   const ctx = cv.getContext('2d', {willReadFrequently:true});
   ctx.drawImage(bmp, 0, 0, W, H);
   const data = ctx.getImageData(0, 0, W, H).data;
-  const r = mode === 1 ? analyzeBacklight(data, W, H) : analyzeReflect(data, W, H);
+  
+  const r = analyzeHoleShape(data, W, H);
 
-  // 썸네일 + 마커
+  // 썸네일 생성 및 윤곽선 그려주기
   const TW = 160, TH = Math.round(H * TW / W);
   const tc = document.createElement('canvas');
   tc.width = TW; tc.height = TH;
   const tctx = tc.getContext('2d');
   tctx.drawImage(bmp, 0, 0, TW, TH);
   const sc = TW / W;
-  tctx.strokeStyle = '#E53935';
-  tctx.lineWidth = 1.5;
-  if(r.found){
+
+  if(r.found && r.edgePts.length > 0){
+    tctx.strokeStyle = '#E53935';
+    tctx.lineWidth = 1.2;
     tctx.beginPath();
-    if(mode === 2){
-      tctx.arc(r.hx*sc, r.hy*sc, 13, 0, Math.PI*2);
-    } else if(r.darkCnt > 0){
-      tctx.arc(r.dcx*sc, r.dcy*sc, 10, 0, Math.PI*2);
-    } else {
-      tctx.arc(r.cx*sc, r.cy*sc, r.re*sc, 0, Math.PI*2);
+    tctx.moveTo(r.edgePts[0].x * sc, r.edgePts[0].y * sc);
+    for(let i=1; i<r.edgePts.length; i++){
+      tctx.lineTo(r.edgePts[i].x * sc, r.edgePts[i].y * sc);
     }
+    tctx.closePath();
     tctx.stroke();
   }
+
   const thumb = tc.toDataURL('image/jpeg', 0.75);
   bmp.close();
   return { ...r, thumb };
@@ -508,7 +430,6 @@ $('folderInput').addEventListener('change', async e => {
   e.target.value = '';
   if(!all.length) return;
 
-  // 즉시 로딩 표시 (파일 수가 많으면 준비에 몇 초 걸릴 수 있음)
   analyzing = true;
   $('btnFolder').disabled = true;
   const btnOrig = $('btnFolder').textContent;
@@ -517,14 +438,13 @@ $('folderInput').addEventListener('change', async e => {
   $('spinner').style.display = 'inline-block';
   $('pfill').style.width = '0%';
   $('progressText').textContent = '파일 목록 읽는 중... (' + all.length + '개 확인)';
-  await new Promise(r => setTimeout(r, 30));   // 로딩 표시를 먼저 화면에 그림
+  await new Promise(r => setTimeout(r, 30));
 
   const f2 = parseInt($('from2').value,10), t2 = parseInt($('to2').value,10);
   const f1 = parseInt($('from1').value,10), t1 = parseInt($('to1').value,10);
 
   const targets = [];
   for(const f of all){
-    // 선택한 폴더 바로 아래 파일만 검사 (하위폴더 제외)
     const rel = f.webkitRelativePath || f.name;
     if(rel.split('/').length > 2) continue;
     const num = extractNum(f.name);
@@ -568,7 +488,7 @@ $('folderInput').addEventListener('change', async e => {
       results.push({ name:t.file.name, num:t.num, file:t.file, mode:t.mode, ...r, verdict:'', reason:'' });
     }catch(err){
       results.push({ name:t.file.name, num:t.num, file:t.file, mode:t.mode,
-        found:false, ratio:0, b:0, g:0, gmean:0, dmean:0, darkCnt:0, thumb:'', verdict:'', reason:'' });
+        found:false, roundness:0, roughness:0, chipDepth:0, burrHeight:0, thumb:'', verdict:'', reason:'' });
     }
     $('pfill').style.width = ((i+1)/targets.length*100).toFixed(1) + '%';
     const done = i+1;
@@ -590,26 +510,29 @@ $('folderInput').addEventListener('change', async e => {
 /* ============ 판정 (재분석 없이 즉시 재판정) ============ */
 function judge(){
   if(!results.length) return;
-  const th = parseFloat($('thres').value);
-  const bm = parseFloat($('brightMin').value);
-  const dm = parseFloat($('diskMin').value);
-  const dp = parseFloat($('defectPx').value);
+  const roundMin = parseFloat($('roundMin').value);
+  const roughMax = parseFloat($('roughMax').value);
+  const chipMax = parseFloat($('chipMax').value);
+  const burrMax = parseFloat($('burrMax').value);
 
-  const rc = {'투과불량':0, '음영불량':0, '이물':0};
+  const rc = {'찌그러짐':0, '윤곽불량':0, '이빠짐/크랙':0, '버발생':0};
   let pass=0, fail=0, warn=0;
+
   for(const r of results){
     if(!r.found){ r.verdict='판정불가'; r.reason='탐지 실패'; warn++; continue; }
+    
     if(r.mode === 1){
-      if(r.dmean < dm){ r.verdict='부적합'; r.reason='음영불량'; }
-      else if(r.darkCnt >= dp){ r.verdict='부적합'; r.reason='이물'; }
+      if(r.roundness < roundMin){ r.verdict='부적합'; r.reason='찌그러짐'; }
+      else if(r.roughness > roughMax){ r.verdict='부적합'; r.reason='윤곽불량'; }
       else { r.verdict='합격'; r.reason=''; }
     } else {
-      if(r.gmean < bm){ r.verdict='부적합'; r.reason='투과불량'; }
-      else if(r.ratio < th){ r.verdict='부적합'; r.reason='음영불량'; }
+      if(r.chipDepth > chipMax){ r.verdict='부적합'; r.reason='이빠짐/크랙'; }
+      else if(r.burrHeight > burrMax){ r.verdict='부적합'; r.reason='버발생'; }
       else { r.verdict='합격'; r.reason=''; }
     }
+
     if(r.verdict === '합격') pass++;
-    else { fail++; rc[r.reason]++; }
+    else { fail++; if(rc[r.reason] !== undefined) rc[r.reason]++; }
   }
 
   $('cntTotal').textContent = results.length;
@@ -617,24 +540,23 @@ function judge(){
   $('cntByMode').textContent = '1차 ' + n1 + ' · 2차 ' + (results.length-n1);
   $('cntPass').textContent = pass;
   $('cntFail').textContent = fail;
-  $('cntByReason').textContent = '음영 ' + rc['음영불량'] + ' · 투과 ' + rc['투과불량'] + ' · 이물 ' + rc['이물'];
+  $('cntByReason').textContent = '찌그러짐 ' + rc['찌그러짐'] + ' · 윤곽 ' + rc['윤곽불량'] + ' · 함몰 ' + rc['이빠짐/크랙'] + ' · 버 ' + rc['버발생'];
   $('cntWarn').textContent = warn;
   $('summary').style.display = 'grid';
   $('listCard').style.display = 'block';
 
-  const has2 = results.some(r => r.mode === 2);
-  $('distCard').style.display = has2 ? 'block' : 'none';
-  if(has2) drawDist(th);
+  $('distCard').style.display = 'block';
+  drawDist(roundMin);
   renderList();
 }
 
-$('thres').addEventListener('input', () => { $('thresVal').textContent = parseFloat($('thres').value).toFixed(2); judge(); });
-$('brightMin').addEventListener('input', () => { $('brightVal').textContent = $('brightMin').value; judge(); });
-$('diskMin').addEventListener('input', () => { $('diskMinVal').textContent = $('diskMin').value; judge(); });
-$('defectPx').addEventListener('input', () => { $('defectPxVal').textContent = $('defectPx').value; judge(); });
+$('roundMin').addEventListener('input', () => { $('roundMinVal').textContent = parseFloat($('roundMin').value).toFixed(2); judge(); });
+$('roughMax').addEventListener('input', () => { $('roughMaxVal').textContent = parseFloat($('roughMax').value).toFixed(1); judge(); });
+$('chipMax').addEventListener('input', () => { $('chipMaxVal').textContent = parseFloat($('chipMax').value).toFixed(1); judge(); });
+$('burrMax').addEventListener('input', () => { $('burrMaxVal').textContent = parseFloat($('burrMax').value).toFixed(1); judge(); });
 $('chkAll').addEventListener('change', renderList);
 
-/* ============ 분포 캔버스 (1차 전용) ============ */
+/* ============ 진원도 분포 캔버스 ============ */
 function drawDist(th){
   const cv = $('distCanvas');
   const w = cv.clientWidth, h = 74;
@@ -643,23 +565,22 @@ function drawDist(th){
   ctx.scale(devicePixelRatio, devicePixelRatio);
   ctx.clearRect(0,0,w,h);
 
-  const LO = 0.40, HI = 0.80;
+  const LO = 0.50, HI = 1.00;
   const X = v => (Math.min(HI, Math.max(LO, v)) - LO) / (HI - LO) * (w - 20) + 10;
 
   ctx.strokeStyle = '#D6DAD4';
   ctx.beginPath(); ctx.moveTo(10, h-18); ctx.lineTo(w-10, h-18); ctx.stroke();
   ctx.fillStyle = '#8A938D'; ctx.font = '10px Consolas,monospace';
-  for(let v=0.40; v<=0.801; v+=0.10){
+  for(let v=0.50; v<=1.001; v+=0.10){
     ctx.fillText(v.toFixed(2), X(v)-10, h-5);
   }
 
   let j = 0;
   for(const r of results){
-    if(r.mode !== 2 || r.verdict === '판정불가') continue;
-    const x = X(r.ratio);
+    if(r.verdict === '판정불가') continue;
+    const x = X(r.roundness);
     const y = 14 + ((j * 7) % 30); j++;
-    ctx.fillStyle = r.verdict === '합격' ? '#1E7A46'
-                  : r.reason === '투과불량' ? '#5B4FA8' : '#C4372B';
+    ctx.fillStyle = r.verdict === '합격' ? '#1E7A46' : '#C4372B';
     ctx.globalAlpha = 0.75;
     ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI*2); ctx.fill();
   }
@@ -668,15 +589,15 @@ function drawDist(th){
   ctx.strokeStyle = '#0E5E63'; ctx.lineWidth = 2;
   ctx.beginPath(); ctx.moveTo(X(th), 6); ctx.lineTo(X(th), h-18); ctx.stroke();
 }
+
 window.addEventListener('resize', () => {
-  if(results.length && results.some(r=>r.mode===2)) drawDist(parseFloat($('thres').value));
+  if(results.length) drawDist(parseFloat($('roundMin').value));
 });
 
 /* ============ 측정값 문자열 ============ */
 function metricText(r){
   if(!r.found) return '-';
-  if(r.mode === 2) return '밝기 ' + Math.round(r.gmean) + ' · B/G ' + r.ratio.toFixed(3);
-  return '밝기 ' + Math.round(r.dmean) + ' · 이물 ' + r.darkCnt + 'px';
+  return '진원도 ' + r.roundness.toFixed(3) + ' · 함몰 ' + r.chipDepth.toFixed(1) + 'px · Burr ' + r.burrHeight.toFixed(1) + 'px';
 }
 
 /* ============ 리스트 ============ */
@@ -695,8 +616,7 @@ function renderList(){
     const tr = document.createElement('tr');
     tr.className = 'row-item';
     const cls = r.verdict === '합격' ? 'pass'
-              : r.verdict === '판정불가' ? 'warn'
-              : r.reason === '투과불량' ? 'dark' : 'fail';
+              : r.verdict === '판정불가' ? 'warn' : 'fail';
     const vtext = r.verdict === '부적합' ? '부적합·' + r.reason : r.verdict;
     tr.innerHTML =
       '<td>' + (r.thumb ? '<img src="' + r.thumb + '" alt="">' : '-') + '</td>' +
@@ -712,7 +632,7 @@ function renderList(){
   tb.appendChild(frag);
 }
 
-/* ============ 원본 확대 모달 (◀▶ 방향키 · 스와이프) ============ */
+/* ============ 원본 확대 모달 ============ */
 let modalUrl = null, modalRows = [], modalIdx = -1;
 
 function showModalItem(){
@@ -750,16 +670,8 @@ document.addEventListener('keydown', e => {
   else if(e.key === 'ArrowLeft'){ e.preventDefault(); moveModal(-1); }
   else if(e.key === 'Escape'){ closeModal(); }
 });
-let touchX = null;
-$('modalImg').addEventListener('touchstart', e => { touchX = e.touches[0].clientX; }, {passive:true});
-$('modalImg').addEventListener('touchend', e => {
-  if(touchX === null) return;
-  const dx = e.changedTouches[0].clientX - touchX;
-  touchX = null;
-  if(Math.abs(dx) > 40) moveModal(dx < 0 ? 1 : -1);
-}, {passive:true});
 
-/* ============ 엑셀 보고서 다운로드 (썸네일 이미지 포함) ============ */
+/* ============ 엑셀 보고서 다운로드 ============ */
 $('btnExcel').addEventListener('click', async () => {
   if(!results.length) return;
   const btn = $('btnExcel');
@@ -802,7 +714,7 @@ async function buildReport(){
 
   const wb = new ExcelJS.Workbook();
 
-  /* ---------- 시트 1: 검사보고서 (A4 세로 인쇄 맞춤) ---------- */
+  /* ---------- 시트 1: 검사보고서 ---------- */
   const ws = wb.addWorksheet('검사보고서', {
     pageSetup:{
       paperSize:9, orientation:'portrait',
@@ -817,7 +729,7 @@ async function buildReport(){
   ];
 
   ws.mergeCells('A1:H1');
-  setCell(ws, 'A1', 'HOLE 검사 결과 보고서',
+  setCell(ws, 'A1', 'HOLE 형상 검사 결과 보고서',
     {font:{size:16, bold:true, color:{argb:'FF0E5E63'}}, align:{horizontal:'center'}, border:false});
   ws.getRow(1).height = 30;
 
@@ -833,23 +745,21 @@ async function buildReport(){
   setCell(ws, 'B4', results.length + '개 (1차 ' + n1 + '개 · 2차 ' + (results.length-n1) + '개)');
   ws.getRow(4).height = 20;
 
-  setCell(ws, 'A5', '1차 기준 (역광)', {font:{bold:true}, fill:'FFEFF3EF'});
+  setCell(ws, 'A5', '1차 형상기준', {font:{bold:true}, fill:'FFEFF3EF'});
   ws.mergeCells('B5:H5');
-  setCell(ws, 'B5', '원판밝기 ' + $('diskMin').value + ' 미만 → 음영불량 · 이물 ' + $('defectPx').value + 'px 이상 → 이물',
-    {align:{wrapText:true}});
+  setCell(ws, 'B5', '진원도 ' + $('roundMin').value + ' 미만 → 찌그러짐 · 에지거칠음 ' + $('roughMax').value + 'px 이상 → 윤곽불량', {align:{wrapText:true}});
   ws.getRow(5).height = 20;
 
-  setCell(ws, 'A6', '2차 기준 (반사광)', {font:{bold:true}, fill:'FFEFF3EF'});
+  setCell(ws, 'A6', '2차 에지기준', {font:{bold:true}, fill:'FFEFF3EF'});
   ws.mergeCells('B6:H6');
-  setCell(ws, 'B6', '홀밝기 ' + $('brightMin').value + ' 미만 → 투과불량 · B/G ' + $('thres').value + ' 미만 → 음영불량',
-    {align:{wrapText:true}});
+  setCell(ws, 'B6', '함몰깊이 ' + $('chipMax').value + 'px 이상 → 이빠짐/크랙 · Burr ' + $('burrMax').value + 'px 이상 → 버발생', {align:{wrapText:true}});
   ws.getRow(6).height = 20;
 
   // 판정 요약
   ws.mergeCells('A8:H8');
   setCell(ws, 'A8', '판정 요약', {font:{size:12, bold:true}, border:false});
-  const heads = ['합격','부적합 계','음영불량','투과불량','이물','판정불가'];
-  const vals  = [nPass, nFail, cnt('음영불량'), cnt('투과불량'), cnt('이물'), nWarn];
+  const heads = ['합격','부적합 계','찌그러짐','윤곽불량','이빠짐','버발생'];
+  const vals  = [nPass, nFail, cnt('찌그러짐'), cnt('윤곽불량'), cnt('이빠짐/크랙'), cnt('버발생')];
   for(let i=0; i<6; i++){
     setCell(ws, ws.getRow(9).getCell(i+1).address, heads[i],
       {font:{bold:true, color:{argb:'FFFFFFFF'}}, fill:'FF0E5E63', align:{horizontal:'center'}});
@@ -860,12 +770,12 @@ async function buildReport(){
   }
   ws.getRow(9).height = 20; ws.getRow(10).height = 22;
 
-  // 부적합 LIST (썸네일 포함)
+  // 부적합 LIST
   const ng = results.filter(r => r.verdict !== '합격');
   ws.mergeCells('A12:H12');
   setCell(ws, 'A12', '부적합 LIST (' + ng.length + '건)', {font:{size:12, bold:true}, border:false});
 
-  const listHead = ['검사이미지','파일명','번호','구분','밝기','B/G','이물px','판정'];
+  const listHead = ['검사이미지','파일명','번호','구분','진원도','함몰(px)','Burr(px)','판정'];
   const hr = ws.getRow(13);
   listHead.forEach((h,i) => setCell(ws, hr.getCell(i+1).address, h,
     {font:{bold:true, color:{argb:'FFFFFFFF'}}, fill:'FF0E5E63', align:{horizontal:'center'}}));
@@ -879,12 +789,9 @@ async function buildReport(){
     setCell(ws, row.getCell(2).address, r.name, {align:{wrapText:true}});
     setCell(ws, row.getCell(3).address, r.num, {align:{horizontal:'center'}});
     setCell(ws, row.getCell(4).address, r.mode + '차', {align:{horizontal:'center'}});
-    setCell(ws, row.getCell(5).address,
-      r.found ? Math.round(r.mode===2 ? r.gmean : r.dmean) : '', {align:{horizontal:'center'}});
-    setCell(ws, row.getCell(6).address,
-      r.mode===2 && r.found ? Number(r.ratio.toFixed(3)) : '', {align:{horizontal:'center'}});
-    setCell(ws, row.getCell(7).address,
-      r.mode===1 && r.found ? r.darkCnt : '', {align:{horizontal:'center'}});
+    setCell(ws, row.getCell(5).address, r.found ? Number(r.roundness.toFixed(3)) : '', {align:{horizontal:'center'}});
+    setCell(ws, row.getCell(6).address, r.found ? Number(r.chipDepth.toFixed(1)) : '', {align:{horizontal:'center'}});
+    setCell(ws, row.getCell(7).address, r.found ? Number(r.burrHeight.toFixed(1)) : '', {align:{horizontal:'center'}});
     setCell(ws, row.getCell(8).address,
       r.verdict + (r.reason ? ' (' + r.reason + ')' : ''),
       {font:{bold:true, color:{argb: r.verdict==='판정불가' ? 'FF9A6B00' : 'FFC4372B'}},
@@ -899,26 +806,20 @@ async function buildReport(){
     ws.mergeCells('A14:H14');
     setCell(ws, 'A14', '부적합 없음 · 전량 합격', {align:{horizontal:'center'}});
   }
-  // 인쇄 시 매 페이지에 LIST 헤더 반복
-  ws.pageSetup.printTitlesRow = '13:13';
 
   /* ---------- 시트 2: 전체결과 ---------- */
-  const ws2 = wb.addWorksheet('전체결과', {
-    pageSetup:{paperSize:9, orientation:'portrait', fitToPage:true, fitToWidth:1, fitToHeight:0,
-      margins:{left:0.35, right:0.35, top:0.5, bottom:0.5, header:0.2, footer:0.2}}
-  });
-  ws2.columns = [{width:32},{width:9},{width:8},{width:9},{width:10},{width:10},{width:11},{width:13}];
-  ws2.pageSetup.printTitlesRow = '1:1';
-  const h2 = ['파일명','번호','구분','밝기','B/G','이물px','판정','사유'];
+  const ws2 = wb.addWorksheet('전체결과');
+  ws2.columns = [{width:32},{width:9},{width:8},{width:10},{width:10},{width:10},{width:11},{width:13}];
+  const h2 = ['파일명','번호','구분','진원도','함몰(px)','Burr(px)','판정','사유'];
   h2.forEach((h,i) => setCell(ws2, ws2.getRow(1).getCell(i+1).address, h,
     {font:{bold:true, color:{argb:'FFFFFFFF'}}, fill:'FF0E5E63', align:{horizontal:'center'}}));
   let ri = 2;
   for(const r of results){
     const row = ws2.getRow(ri++);
     const vals2 = [r.name, r.num, r.mode + '차',
-      r.found ? Math.round(r.mode===2 ? r.gmean : r.dmean) : '',
-      r.mode===2 && r.found ? Number(r.ratio.toFixed(3)) : '',
-      r.mode===1 && r.found ? r.darkCnt : '',
+      r.found ? Number(r.roundness.toFixed(3)) : '',
+      r.found ? Number(r.chipDepth.toFixed(1)) : '',
+      r.found ? Number(r.burrHeight.toFixed(1)) : '',
       r.verdict, r.reason];
     vals2.forEach((v,i) => {
       const c = setCell(ws2, row.getCell(i+1).address, v,
@@ -932,7 +833,7 @@ async function buildReport(){
   const blob = new Blob([buf], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'HOLE검사보고서_' + stamp + '.xlsx';
+  a.download = 'HOLE_형상검사보고서_' + stamp + '.xlsx';
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 }
