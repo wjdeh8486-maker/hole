@@ -349,7 +349,17 @@ function analyzeReflect(data, W, H){
     }
   }
   if(best < SCORE_FLOOR){
-    return { found:false, hx:W>>1, hy:H>>1, gmean:0, b:0, g:0, ratio:0 };
+   return {
+    found:false,
+    cx:W>>1,
+    cy:H>>1,
+
+    radiusMean:0,
+    radiusRange:0,
+
+    chipDepth:0,
+    burrHeight:0
+};
   }
   for(let r=Math.max(40,br-4); r<=br+4; r++){
     for(let y=by-3; y<=by+3; y++){
@@ -385,7 +395,17 @@ function analyzeReflect(data, W, H){
     }
   }
   const g = sg/cnt, b = sb/cnt;
-  return { found:true, hx, hy, gmean:sgr/cnt, b, g, ratio: g>0 ? b/g : 0 };
+  return {
+    found:true,
+    cx,
+    cy,
+
+    radiusMean,
+    radiusRange,
+
+    chipDepth,
+    burrHeight
+};
 }
 
 /* ==============================================================
