@@ -3,14 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>HOLE 형상 검사</title>
+<title>HOLE 형상 정밀 통합 검사</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <style>
   :root{
     --bg:#F4F5F2; --card:#FFFFFF; --ink:#1C2320; --sub:#6B746F;
     --line:#E1E4DF; --accent:#0E5E63; --accent-soft:#E3EFEF;
     --pass:#1E7A46; --pass-bg:#E7F3EC; --fail:#C4372B; --fail-bg:#FBEAE7;
-    --dark:#5B4FA8; --dark-bg:#ECEAF7;
     --warn:#9A6B00; --warn-bg:#FBF3DC;
     --mono:'Consolas','IBM Plex Mono',monospace;
   }
@@ -22,7 +21,7 @@
   }
   .layout{display:flex; gap:16px; align-items:flex-start;}
   .col-main{flex:1; order:2; min-width:0;}
-  .col-side{flex:0 0 500px; order:1; position:sticky; top:12px;
+  .col-side{flex:0 0 480px; order:1; position:sticky; top:12px;
     max-height:calc(100vh - 24px); overflow-y:auto;}
   @media (max-width:1150px){
     .layout{display:block;}
@@ -54,13 +53,12 @@
   #folderInput{display:none;}
   #folderName{font-size:12px; color:var(--sub); font-family:var(--mono);}
 
-  .thres-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px 24px; margin-top:14px; padding-top:13px; border-top:1px dashed var(--line);}
+  .thres-grid{display:grid; grid-template-columns:1fr 1fr; gap:12px 20px; margin-top:14px; padding-top:13px; border-top:1px dashed var(--line);}
   .thres{display:flex; flex-direction:column; gap:4px;}
   .thres label{font-size:11.5px; color:var(--sub); font-weight:600;}
   .thres .row{display:flex; align-items:center; gap:10px;}
   .thres input[type=range]{flex:1; accent-color:var(--accent);}
   .thres .val{font-family:var(--mono); font-size:14.5px; font-weight:700; color:var(--accent); width:48px;}
-  .mode-label{font-size:12px; font-weight:800; color:var(--ink); grid-column:span 1;}
 
   #progressWrap{display:none;}
   .spin{display:inline-block; width:12px; height:12px; border:2px solid var(--accent);
@@ -99,9 +97,7 @@
   .badge{display:inline-block; padding:2.5px 9px; border-radius:12px; font-size:11.5px; font-weight:700; white-space:nowrap;}
   .badge.pass{background:var(--pass-bg); color:var(--pass);}
   .badge.fail{background:var(--fail-bg); color:var(--fail);}
-  .badge.dark{background:var(--dark-bg); color:var(--dark);}
   .badge.warn{background:var(--warn-bg); color:var(--warn);}
-  .mode-chip{display:inline-block; padding:2px 7px; border-radius:5px; font-size:11px; font-weight:700; background:#EEF1ED; color:var(--sub);}
   .empty{color:var(--sub); font-size:13px; padding:14px 4px;}
 
   #modal{display:none; position:fixed; inset:0; background:rgba(15,20,18,.72); z-index:50;
@@ -122,12 +118,10 @@
 <body>
 
 <header>
-  <h1>HOLE 형상 & 에지 정밀 검사</h1>
-  <span class="tag">V5 · 형상 정밀 측정</span>
+  <h1>HOLE 형상 정밀 통합 검사</h1>
+  <span class="tag">V6 · 통합 스캔</span>
   <div class="desc">
-    홀 테두리 윤곽선의 <b>진원도(Circularity)</b>, <b>에지 일그러짐(Roughness)</b>, <b>이빠짐(Chip)</b> 및 <b>버(Burr)</b>를 정밀 측정하여 자동 판정합니다.<br>
-    <b>1차</b>: 진원도 미달 → 찌그러짐 / 에지 거칠음 초과 → 윤곽불량 &nbsp;·&nbsp;
-    <b>2차</b>: 이빠짐 깊이 초과 → 함몰/크랙 / Burr 높이 초과 → 버 발생
+    지정한 번호 범위 내 모든 이미지에 대해 <b>진원도</b>, <b>에지 거칠음</b>, <b>이빠짐/함몰</b>, <b>Burr/돌기</b> 4가지 항목을 동시에 자동 정밀 검사합니다.
   </div>
 </header>
 
@@ -142,15 +136,9 @@
       <input type="file" id="folderInput" webkitdirectory multiple>
     </div>
     <div class="field">
-      <label>1차 번호 범위 (기본 검사)</label>
+      <label>검사 번호 범위 (기본: 15 ~ 622)</label>
       <div class="pair">
-        <input type="number" id="from2" value="13"> ~ <input type="number" id="to2" value="1461">
-      </div>
-    </div>
-    <div class="field">
-      <label>2차 번호 범위 (정밀 검사)</label>
-      <div class="pair">
-        <input type="number" id="from1" value="1472"> ~ <input type="number" id="to1" value="2650">
+        <input type="number" id="fromNum" value="15"> ~ <input type="number" id="toNum" value="622">
       </div>
     </div>
     <div class="field">
@@ -160,9 +148,6 @@
   </div>
 
   <div class="thres-grid">
-    <div class="mode-label">1차 형상 기준</div>
-    <div class="mode-label">2차 에지 기준</div>
-    
     <div class="thres">
       <label>진원도 (미만 → 찌그러짐)</label>
       <div class="row">
@@ -171,17 +156,17 @@
       </div>
     </div>
     <div class="thres">
-      <label>이빠짐 깊이 px (이상 → 함몰)</label>
-      <div class="row">
-        <input type="range" id="chipMax" min="1.0" max="15.0" step="0.5" value="4.5">
-        <span class="val" id="chipMaxVal">4.5</span>
-      </div>
-    </div>
-    <div class="thres">
       <label>에지 거칠음 px (이상 → 윤곽불량)</label>
       <div class="row">
         <input type="range" id="roughMax" min="0.5" max="10.0" step="0.5" value="3.0">
         <span class="val" id="roughMaxVal">3.0</span>
+      </div>
+    </div>
+    <div class="thres">
+      <label>이빠짐 깊이 px (이상 → 함몰)</label>
+      <div class="row">
+        <input type="range" id="chipMax" min="1.0" max="15.0" step="0.5" value="4.5">
+        <span class="val" id="chipMaxVal">4.5</span>
       </div>
     </div>
     <div class="thres">
@@ -203,7 +188,6 @@
 <div class="card summary" id="summary">
   <div class="sum-item">
     <div class="n" id="cntTotal">0</div><div class="t">검사 수량</div>
-    <div class="sub2" id="cntByMode"></div>
   </div>
   <div class="sum-item pass"><div class="n" id="cntPass">0</div><div class="t">합격</div></div>
   <div class="sum-item fail">
@@ -218,8 +202,8 @@
   <canvas id="distCanvas"></canvas>
   <div class="dist-note">
     <span class="dot" style="background:#1E7A46"></span>합격 &nbsp;
-    <span class="dot" style="background:#C4372B"></span>형상/에지 불량 &nbsp;·&nbsp; 세로선 = 진원도 기준.
-    슬라이더 조정 시 즉시 재판정됩니다.
+    <span class="dot" style="background:#C4372B"></span>부적합 &nbsp;·&nbsp; 세로선 = 진원도 기준.
+    슬라이더 조절 시 즉시 실시간 재판정됩니다.
   </div>
 </div>
 
@@ -233,7 +217,7 @@
   </div>
   <div style="overflow-x:auto;">
     <table>
-      <thead><tr><th>썸네일</th><th>파일명</th><th>번호</th><th>구분</th><th>측정값 (진원도/깊이/버)</th><th>판정</th></tr></thead>
+      <thead><tr><th>썸네일</th><th>파일명</th><th>번호</th><th>측정값 (진원도 / 거칠음 / 함몰 / Burr)</th><th>판정</th></tr></thead>
       <tbody id="listBody"></tbody>
     </table>
   </div>
@@ -267,7 +251,7 @@ let folderTitle = '';
 const $ = id => document.getElementById(id);
 
 function extractNum(name){
-  const m = name.match(/_(\d+)\.jpe?g$/i);
+  const m = name.match(/_(\d+)\.jpe?g$/i) || name.match(/(\d+)\.jpe?g$/i);
   return m ? parseInt(m[1], 10) : null;
 }
 
@@ -280,9 +264,9 @@ function toGray(data, W, H){
 }
 
 /* ==============================================================
-   정밀 홀 형상 및 에지 분석 알고리즘 (360도 반경 레이캐스팅)
+   정밀 홀 형상 및 에지 분석 알고리즘 (360도 레이캐스팅)
 ============================================================== */
-const NUM_ANGLES = 72; // 5도 간격으로 72개 정밀 측정
+const NUM_ANGLES = 72; // 5도 간격 정밀 스캔
 const COS_A = [], SIN_A = [];
 for(let i=0; i<NUM_ANGLES; i++){
   const rad = (i * 360 / NUM_ANGLES) * Math.PI / 180;
@@ -293,8 +277,6 @@ for(let i=0; i<NUM_ANGLES; i++){
 function analyzeHoleShape(data, W, H){
   const gray = toGray(data, W, H);
   
-  // 1. 홀 마스크 및 중심점(Center of Mass) 구하기
-  // 밝은 홀/어두운 원판 또는 어두운 홀을 대비차로 탐지
   let sumX = 0, sumY = 0, cnt = 0;
   let minG = 255, maxG = 0;
   for(let i=0; i<W*H; i++){
@@ -302,17 +284,13 @@ function analyzeHoleShape(data, W, H){
     if(gray[i] > maxG) maxG = gray[i];
   }
   const midTh = (minG + maxG) / 2;
-
-  // 홀 픽셀 이진화 (보통 홀 영역 내부가 원판과 확실한 대비를 이룸)
   const isHoleBright = gray[(H/2|0)*W + (W/2|0)] > midTh;
   
   for(let y=0; y<H; y++){
     for(let x=0; x<W; x++){
       const val = gray[y*W+x];
       const isInner = isHoleBright ? (val > midTh) : (val < midTh);
-      if(isInner){
-        sumX += x; sumY += y; cnt++;
-      }
+      if(isInner){ sumX += x; sumY += y; cnt++; }
     }
   }
 
@@ -323,22 +301,18 @@ function analyzeHoleShape(data, W, H){
   const cx = sumX / cnt;
   const cy = sumY / cnt;
 
-  // 2. 360도 방향으로 Edge Point(경계점) 탐색
   const radii = [];
   const edgePts = [];
 
   for(let a=0; a<NUM_ANGLES; a++){
-    const dx = COS_A[a];
-    const dy = SIN_A[a];
+    const dx = COS_A[a], dy = SIN_A[a];
     let edgeR = 0;
 
-    // 중심에서부터 밖으로 스캔
     for(let r=3; r<Math.min(W, H)/2; r++){
       const px = Math.round(cx + dx * r);
       const py = Math.round(cy + dy * r);
       if(px < 1 || px >= W-1 || py < 1 || py >= H-1) { edgeR = r; break; }
 
-      // 경계 기울기(Gradient) 계산
       const curr = gray[py*W + px];
       const next = gray[Math.round(cy + dy*(r+2))*W + Math.round(cx + dx*(r+2))];
       if(Math.abs(curr - next) > (maxG - minG) * 0.25){
@@ -346,19 +320,18 @@ function analyzeHoleShape(data, W, H){
         break;
       }
     }
-    if(edgeR === 0) edgeR = 20; // fallback
+    if(edgeR === 0) edgeR = 20;
     radii.push(edgeR);
     edgePts.push({x: cx + dx*edgeR, y: cy + dy*edgeR});
   }
 
-  // 3. 형상 측정 지표 산출
   let rSum = 0;
   for(const r of radii) rSum += r;
   const rMean = rSum / NUM_ANGLES;
 
   let varianceSum = 0;
-  let maxChip = 0;  // 함몰 (평균보다 반경이 작음)
-  let maxBurr = 0;  // 버 (평균보다 반경이 큼)
+  let maxChip = 0; 
+  let maxBurr = 0; 
 
   for(const r of radii){
     const diff = r - rMean;
@@ -367,24 +340,17 @@ function analyzeHoleShape(data, W, H){
     if(diff > 0 && diff > maxBurr) maxBurr = diff;
   }
 
-  const roughness = Math.sqrt(varianceSum / NUM_ANGLES); // 에지 편차 (Roughness)
-  
-  // 진원도 (Circularity) = 1 - (반경 표준편차 / 평균반경)
+  const roughness = Math.sqrt(varianceSum / NUM_ANGLES);
   const roundness = Math.max(0, Math.min(1.0, 1.0 - (roughness / rMean)));
 
   return {
-    found: true,
-    cx, cy, rMean,
-    roundness,
-    roughness,
-    chipDepth: maxChip,
-    burrHeight: maxBurr,
-    edgePts
+    found: true, cx, cy, rMean,
+    roundness, roughness, chipDepth: maxChip, burrHeight: maxBurr, edgePts
   };
 }
 
 /* ============ 파일 분석 ============ */
-async function analyzeFile(file, mode){
+async function analyzeFile(file){
   const bmp = await createImageBitmap(file);
   const W = 320, H = Math.max(1, Math.round(bmp.height * W / bmp.width));
   const cv = document.createElement('canvas');
@@ -395,7 +361,6 @@ async function analyzeFile(file, mode){
   
   const r = analyzeHoleShape(data, W, H);
 
-  // 썸네일 생성 및 윤곽선 그려주기
   const TW = 160, TH = Math.round(H * TW / W);
   const tc = document.createElement('canvas');
   tc.width = TW; tc.height = TH;
@@ -440,8 +405,8 @@ $('folderInput').addEventListener('change', async e => {
   $('progressText').textContent = '파일 목록 읽는 중... (' + all.length + '개 확인)';
   await new Promise(r => setTimeout(r, 30));
 
-  const f2 = parseInt($('from2').value,10), t2 = parseInt($('to2').value,10);
-  const f1 = parseInt($('from1').value,10), t1 = parseInt($('to1').value,10);
+  const fNum = parseInt($('fromNum').value, 10);
+  const tNum = parseInt($('toNum').value, 10);
 
   const targets = [];
   for(const f of all){
@@ -449,17 +414,17 @@ $('folderInput').addEventListener('change', async e => {
     if(rel.split('/').length > 2) continue;
     const num = extractNum(f.name);
     if(num === null) continue;
-    if(!isNaN(f2) && !isNaN(t2) && num >= f2 && num <= t2) targets.push({file:f, num, mode:1});
-    else if(!isNaN(f1) && !isNaN(t1) && num >= f1 && num <= t1) targets.push({file:f, num, mode:2});
+    if(!isNaN(fNum) && !isNaN(tNum) && num >= fNum && num <= tNum){
+      targets.push({file:f, num});
+    }
   }
   targets.sort((a,b) => a.num - b.num);
 
   const folder = all[0].webkitRelativePath ? all[0].webkitRelativePath.split('/')[0] : '';
   folderTitle = folder;
-  const n1 = targets.filter(t=>t.mode===1).length, n2 = targets.length - n1;
   $('folderName').textContent =
     (folder ? '폴더: ' + folder + ' · ' : '') +
-    '전체 ' + all.length + '개 중 검사 대상 ' + targets.length + '개 (1차 ' + n1 + ' · 2차 ' + n2 + ') · 하위폴더 제외';
+    '전체 ' + all.length + '개 중 지정 범위(' + fNum + '~' + tNum + ') 검사 대상: ' + targets.length + '개';
 
   if(!targets.length){
     analyzing = false;
@@ -484,10 +449,10 @@ $('folderInput').addEventListener('change', async e => {
   for(let i=0; i<targets.length; i++){
     const t = targets[i];
     try{
-      const r = await analyzeFile(t.file, t.mode);
-      results.push({ name:t.file.name, num:t.num, file:t.file, mode:t.mode, ...r, verdict:'', reason:'' });
+      const r = await analyzeFile(t.file);
+      results.push({ name:t.file.name, num:t.num, file:t.file, ...r, verdict:'', reason:'' });
     }catch(err){
-      results.push({ name:t.file.name, num:t.num, file:t.file, mode:t.mode,
+      results.push({ name:t.file.name, num:t.num, file:t.file,
         found:false, roundness:0, roughness:0, chipDepth:0, burrHeight:0, thumb:'', verdict:'', reason:'' });
     }
     $('pfill').style.width = ((i+1)/targets.length*100).toFixed(1) + '%';
@@ -507,7 +472,7 @@ $('folderInput').addEventListener('change', async e => {
   judge();
 });
 
-/* ============ 판정 (재분석 없이 즉시 재판정) ============ */
+/* ============ 통합 판정 ============ */
 function judge(){
   if(!results.length) return;
   const roundMin = parseFloat($('roundMin').value);
@@ -521,23 +486,18 @@ function judge(){
   for(const r of results){
     if(!r.found){ r.verdict='판정불가'; r.reason='탐지 실패'; warn++; continue; }
     
-    if(r.mode === 1){
-      if(r.roundness < roundMin){ r.verdict='부적합'; r.reason='찌그러짐'; }
-      else if(r.roughness > roughMax){ r.verdict='부적합'; r.reason='윤곽불량'; }
-      else { r.verdict='합격'; r.reason=''; }
-    } else {
-      if(r.chipDepth > chipMax){ r.verdict='부적합'; r.reason='이빠짐/크랙'; }
-      else if(r.burrHeight > burrMax){ r.verdict='부적합'; r.reason='버발생'; }
-      else { r.verdict='합격'; r.reason=''; }
-    }
+    // 4가지 요소를 동시 체크
+    if(r.roundness < roundMin){ r.verdict='부적합'; r.reason='찌그러짐'; }
+    else if(r.roughness > roughMax){ r.verdict='부적합'; r.reason='윤곽불량'; }
+    else if(r.chipDepth > chipMax){ r.verdict='부적합'; r.reason='이빠짐/크랙'; }
+    else if(r.burrHeight > burrMax){ r.verdict='부적합'; r.reason='버발생'; }
+    else { r.verdict='합격'; r.reason=''; }
 
     if(r.verdict === '합격') pass++;
     else { fail++; if(rc[r.reason] !== undefined) rc[r.reason]++; }
   }
 
   $('cntTotal').textContent = results.length;
-  const n1 = results.filter(r=>r.mode===1).length;
-  $('cntByMode').textContent = '1차 ' + n1 + ' · 2차 ' + (results.length-n1);
   $('cntPass').textContent = pass;
   $('cntFail').textContent = fail;
   $('cntByReason').textContent = '찌그러짐 ' + rc['찌그러짐'] + ' · 윤곽 ' + rc['윤곽불량'] + ' · 함몰 ' + rc['이빠짐/크랙'] + ' · 버 ' + rc['버발생'];
@@ -594,10 +554,9 @@ window.addEventListener('resize', () => {
   if(results.length) drawDist(parseFloat($('roundMin').value));
 });
 
-/* ============ 측정값 문자열 ============ */
 function metricText(r){
   if(!r.found) return '-';
-  return '진원도 ' + r.roundness.toFixed(3) + ' · 함몰 ' + r.chipDepth.toFixed(1) + 'px · Burr ' + r.burrHeight.toFixed(1) + 'px';
+  return '원 ' + r.roundness.toFixed(3) + ' · 거칠음 ' + r.roughness.toFixed(1) + ' · 함몰 ' + r.chipDepth.toFixed(1) + ' · Burr ' + r.burrHeight.toFixed(1);
 }
 
 /* ============ 리스트 ============ */
@@ -615,14 +574,12 @@ function renderList(){
   for(const r of rows){
     const tr = document.createElement('tr');
     tr.className = 'row-item';
-    const cls = r.verdict === '합격' ? 'pass'
-              : r.verdict === '판정불가' ? 'warn' : 'fail';
+    const cls = r.verdict === '합격' ? 'pass' : r.verdict === '판정불가' ? 'warn' : 'fail';
     const vtext = r.verdict === '부적합' ? '부적합·' + r.reason : r.verdict;
     tr.innerHTML =
       '<td>' + (r.thumb ? '<img src="' + r.thumb + '" alt="">' : '-') + '</td>' +
       '<td class="mono">' + r.name + '</td>' +
       '<td class="mono">' + r.num + '</td>' +
-      '<td><span class="mode-chip">' + r.mode + '차</span></td>' +
       '<td class="mono">' + metricText(r) + '</td>' +
       '<td><span class="badge ' + cls + '">' + vtext + '</span></td>';
     const idx = rows.indexOf(r);
@@ -632,7 +589,7 @@ function renderList(){
   tb.appendChild(frag);
 }
 
-/* ============ 원본 확대 모달 ============ */
+/* ============ 확대 모달 ============ */
 let modalUrl = null, modalRows = [], modalIdx = -1;
 
 function showModalItem(){
@@ -640,8 +597,7 @@ function showModalItem(){
   if(modalUrl) URL.revokeObjectURL(modalUrl);
   modalUrl = URL.createObjectURL(r.file);
   $('modalImg').src = modalUrl;
-  $('modalCap').textContent = r.name + ' · ' + r.mode + '차 · ' + metricText(r) +
-    ' · ' + r.verdict + (r.reason ? '(' + r.reason + ')' : '');
+  $('modalCap').textContent = r.name + ' · ' + metricText(r) + ' · ' + r.verdict + (r.reason ? '(' + r.reason + ')' : '');
   $('modalPos').textContent = (modalIdx+1) + ' / ' + modalRows.length;
   $('btnPrev').disabled = modalIdx <= 0;
   $('btnNext').disabled = modalIdx >= modalRows.length-1;
@@ -671,7 +627,7 @@ document.addEventListener('keydown', e => {
   else if(e.key === 'Escape'){ closeModal(); }
 });
 
-/* ============ 엑셀 보고서 다운로드 ============ */
+/* ============ 엑셀 다운로드 ============ */
 $('btnExcel').addEventListener('click', async () => {
   if(!results.length) return;
   const btn = $('btnExcel');
@@ -709,133 +665,85 @@ async function buildReport(){
   const cnt = re => results.filter(r=>r.reason===re).length;
   const nPass = results.filter(r=>r.verdict==='합격').length;
   const nFail = results.filter(r=>r.verdict==='부적합').length;
-  const nWarn = results.filter(r=>r.verdict==='판정불가').length;
-  const n1 = results.filter(r=>r.mode===1).length;
 
   const wb = new ExcelJS.Workbook();
 
-  /* ---------- 시트 1: 검사보고서 ---------- */
   const ws = wb.addWorksheet('검사보고서', {
-    pageSetup:{
-      paperSize:9, orientation:'portrait',
-      fitToPage:true, fitToWidth:1, fitToHeight:0,
-      horizontalCentered:true,
-      margins:{left:0.35, right:0.35, top:0.5, bottom:0.5, header:0.2, footer:0.2}
-    }
+    pageSetup:{ paperSize:9, orientation:'portrait', fitToPage:true, fitToWidth:1, fitToHeight:0, horizontalCentered:true }
   });
-  ws.columns = [
-    {width:15},{width:32},{width:8},{width:8},
-    {width:10},{width:10},{width:10},{width:17}
-  ];
+  ws.columns = [{width:15},{width:30},{width:8},{width:10},{width:10},{width:10},{width:10},{width:16}];
 
   ws.mergeCells('A1:H1');
-  setCell(ws, 'A1', 'HOLE 형상 검사 결과 보고서',
-    {font:{size:16, bold:true, color:{argb:'FF0E5E63'}}, align:{horizontal:'center'}, border:false});
+  setCell(ws, 'A1', 'HOLE 형사 정밀 검사 보고서', {font:{size:16, bold:true, color:{argb:'FF0E5E63'}}, align:{horizontal:'center'}, border:false});
   ws.getRow(1).height = 30;
 
-  // 검사 정보
   setCell(ws, 'A3', '검사폴더', {font:{bold:true}, fill:'FFEFF3EF'});
   ws.mergeCells('B3:D3'); setCell(ws, 'B3', folderTitle || '-');
   setCell(ws, 'E3', '검사일시', {font:{bold:true}, fill:'FFEFF3EF'});
   ws.mergeCells('F3:H3'); setCell(ws, 'F3', dstr);
-  ws.getRow(3).height = 20;
 
   setCell(ws, 'A4', '검사수량', {font:{bold:true}, fill:'FFEFF3EF'});
-  ws.mergeCells('B4:H4');
-  setCell(ws, 'B4', results.length + '개 (1차 ' + n1 + '개 · 2차 ' + (results.length-n1) + '개)');
-  ws.getRow(4).height = 20;
+  ws.mergeCells('B4:H4'); setCell(ws, 'B4', results.length + '개');
 
-  setCell(ws, 'A5', '1차 형상기준', {font:{bold:true}, fill:'FFEFF3EF'});
+  setCell(ws, 'A5', '판정기준', {font:{bold:true}, fill:'FFEFF3EF'});
   ws.mergeCells('B5:H5');
-  setCell(ws, 'B5', '진원도 ' + $('roundMin').value + ' 미만 → 찌그러짐 · 에지거칠음 ' + $('roughMax').value + 'px 이상 → 윤곽불량', {align:{wrapText:true}});
-  ws.getRow(5).height = 20;
+  setCell(ws, 'B5', '진원도 < ' + $('roundMin').value + ' | 거칠음 > ' + $('roughMax').value + 'px | 함몰 > ' + $('chipMax').value + 'px | Burr > ' + $('burrMax').value + 'px');
 
-  setCell(ws, 'A6', '2차 에지기준', {font:{bold:true}, fill:'FFEFF3EF'});
-  ws.mergeCells('B6:H6');
-  setCell(ws, 'B6', '함몰깊이 ' + $('chipMax').value + 'px 이상 → 이빠짐/크랙 · Burr ' + $('burrMax').value + 'px 이상 → 버발생', {align:{wrapText:true}});
-  ws.getRow(6).height = 20;
-
-  // 판정 요약
-  ws.mergeCells('A8:H8');
-  setCell(ws, 'A8', '판정 요약', {font:{size:12, bold:true}, border:false});
-  const heads = ['합격','부적합 계','찌그러짐','윤곽불량','이빠짐','버발생'];
+  ws.mergeCells('A7:H7');
+  setCell(ws, 'A7', '판정 요약', {font:{size:12, bold:true}, border:false});
+  const heads = ['합격','부적합 계','찌그러짐','윤곽불량','이빠짐/크랙','버발생'];
   const vals  = [nPass, nFail, cnt('찌그러짐'), cnt('윤곽불량'), cnt('이빠짐/크랙'), cnt('버발생')];
   for(let i=0; i<6; i++){
-    setCell(ws, ws.getRow(9).getCell(i+1).address, heads[i],
-      {font:{bold:true, color:{argb:'FFFFFFFF'}}, fill:'FF0E5E63', align:{horizontal:'center'}});
-    const c = setCell(ws, ws.getRow(10).getCell(i+1).address, vals[i],
-      {font:{bold:true, size:12}, align:{horizontal:'center'}});
+    setCell(ws, ws.getRow(8).getCell(i+1).address, heads[i], {font:{bold:true, color:{argb:'FFFFFFFF'}}, fill:'FF0E5E63', align:{horizontal:'center'}});
+    const c = setCell(ws, ws.getRow(9).getCell(i+1).address, vals[i], {font:{bold:true, size:12}, align:{horizontal:'center'}});
     if(i===0) c.font = Object.assign({}, c.font, {color:{argb:'FF1E7A46'}});
     else if(vals[i] > 0) c.font = Object.assign({}, c.font, {color:{argb:'FFC4372B'}});
   }
-  ws.getRow(9).height = 20; ws.getRow(10).height = 22;
 
-  // 부적합 LIST
   const ng = results.filter(r => r.verdict !== '합격');
-  ws.mergeCells('A12:H12');
-  setCell(ws, 'A12', '부적합 LIST (' + ng.length + '건)', {font:{size:12, bold:true}, border:false});
+  ws.mergeCells('A11:H11');
+  setCell(ws, 'A11', '부적합 LIST (' + ng.length + '건)', {font:{size:12, bold:true}, border:false});
 
-  const listHead = ['검사이미지','파일명','번호','구분','진원도','함몰(px)','Burr(px)','판정'];
-  const hr = ws.getRow(13);
-  listHead.forEach((h,i) => setCell(ws, hr.getCell(i+1).address, h,
-    {font:{bold:true, color:{argb:'FFFFFFFF'}}, fill:'FF0E5E63', align:{horizontal:'center'}}));
-  hr.height = 20;
+  const listHead = ['이미지','파일명','번호','진원도','거칠음','함몰(px)','Burr(px)','판정'];
+  const hr = ws.getRow(12);
+  listHead.forEach((h,i) => setCell(ws, hr.getCell(i+1).address, h, {font:{bold:true, color:{argb:'FFFFFFFF'}}, fill:'FF0E5E63', align:{horizontal:'center'}}));
 
-  let rowIdx = 14;
+  let rowIdx = 13;
   for(const r of ng){
     const row = ws.getRow(rowIdx);
     row.height = 58;
     setCell(ws, row.getCell(1).address, '');
     setCell(ws, row.getCell(2).address, r.name, {align:{wrapText:true}});
     setCell(ws, row.getCell(3).address, r.num, {align:{horizontal:'center'}});
-    setCell(ws, row.getCell(4).address, r.mode + '차', {align:{horizontal:'center'}});
-    setCell(ws, row.getCell(5).address, r.found ? Number(r.roundness.toFixed(3)) : '', {align:{horizontal:'center'}});
+    setCell(ws, row.getCell(4).address, r.found ? Number(r.roundness.toFixed(3)) : '', {align:{horizontal:'center'}});
+    setCell(ws, row.getCell(5).address, r.found ? Number(r.roughness.toFixed(1)) : '', {align:{horizontal:'center'}});
     setCell(ws, row.getCell(6).address, r.found ? Number(r.chipDepth.toFixed(1)) : '', {align:{horizontal:'center'}});
     setCell(ws, row.getCell(7).address, r.found ? Number(r.burrHeight.toFixed(1)) : '', {align:{horizontal:'center'}});
-    setCell(ws, row.getCell(8).address,
-      r.verdict + (r.reason ? ' (' + r.reason + ')' : ''),
-      {font:{bold:true, color:{argb: r.verdict==='판정불가' ? 'FF9A6B00' : 'FFC4372B'}},
-       align:{horizontal:'center', wrapText:true}});
+    setCell(ws, row.getCell(8).address, r.verdict + (r.reason ? ' (' + r.reason + ')' : ''), {font:{bold:true, color:{argb:'FFC4372B'}}, align:{horizontal:'center'}});
     if(r.thumb){
       const imgId = wb.addImage({base64: r.thumb, extension:'jpeg'});
       ws.addImage(imgId, {tl:{col:0.08, row:rowIdx-1+0.06}, ext:{width:96, height:72}});
     }
     rowIdx++;
   }
-  if(!ng.length){
-    ws.mergeCells('A14:H14');
-    setCell(ws, 'A14', '부적합 없음 · 전량 합격', {align:{horizontal:'center'}});
-  }
 
-  /* ---------- 시트 2: 전체결과 ---------- */
   const ws2 = wb.addWorksheet('전체결과');
-  ws2.columns = [{width:32},{width:9},{width:8},{width:10},{width:10},{width:10},{width:11},{width:13}];
-  const h2 = ['파일명','번호','구분','진원도','함몰(px)','Burr(px)','판정','사유'];
-  h2.forEach((h,i) => setCell(ws2, ws2.getRow(1).getCell(i+1).address, h,
-    {font:{bold:true, color:{argb:'FFFFFFFF'}}, fill:'FF0E5E63', align:{horizontal:'center'}}));
+  ws2.columns = [{width:30},{width:8},{width:10},{width:10},{width:10},{width:10},{width:12},{width:14}];
+  const h2 = ['파일명','번호','진원도','거칠음','함몰(px)','Burr(px)','판정','사유'];
+  h2.forEach((h,i) => setCell(ws2, ws2.getRow(1).getCell(i+1).address, h, {font:{bold:true, color:{argb:'FFFFFFFF'}}, fill:'FF0E5E63', align:{horizontal:'center'}}));
   let ri = 2;
   for(const r of results){
     const row = ws2.getRow(ri++);
-    const vals2 = [r.name, r.num, r.mode + '차',
-      r.found ? Number(r.roundness.toFixed(3)) : '',
-      r.found ? Number(r.chipDepth.toFixed(1)) : '',
-      r.found ? Number(r.burrHeight.toFixed(1)) : '',
-      r.verdict, r.reason];
-    vals2.forEach((v,i) => {
-      const c = setCell(ws2, row.getCell(i+1).address, v,
-        i>=1 && i<=6 ? {align:{horizontal:'center'}} : undefined);
-      if(i===6 && v!=='합격') c.font = Object.assign({}, c.font,
-        {color:{argb: v==='판정불가' ? 'FF9A6B00' : 'FFC4372B'}});
-    });
+    const vals2 = [r.name, r.num, r.found ? Number(r.roundness.toFixed(3)) : '', r.found ? Number(r.roughness.toFixed(1)) : '', r.found ? Number(r.chipDepth.toFixed(1)) : '', r.found ? Number(r.burrHeight.toFixed(1)) : '', r.verdict, r.reason];
+    vals2.forEach((v,i) => setCell(ws2, row.getCell(i+1).address, v, i>=1 && i<=6 ? {align:{horizontal:'center'}} : undefined));
   }
 
   const buf = await wb.xlsx.writeBuffer();
   const blob = new Blob([buf], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'HOLE_형상검사보고서_' + stamp + '.xlsx';
+  a.download = 'HOLE_통합검사보고서_' + stamp + '.xlsx';
   a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 }
 </script>
 </body>
