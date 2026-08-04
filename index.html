@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>HOLE 형상 정밀 통합 검사 V8</title>
+<title>HOLE 형상 정밀 통합 검사 V9</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <style>
   :root{
@@ -113,9 +113,9 @@
 
 <header>
   <h1>HOLE 형상 정밀 통합 검사</h1>
-  <span class="tag">V8 · 윤곽선 완벽 추적 엔진</span>
+  <span class="tag">V9 · 고정밀 에지 매칭 엔진</span>
   <div class="desc">
-    배경 얼룩이나 외부 테두리를 완벽히 차단하고, <b>실제 홀의 원형 에지</b>만 정밀 추출하도록 전면 개편되었습니다.
+    밝기 반전 및 배경 얼룩 노이즈를 완벽 차단하고, <b>실제 홀의 가장 강력한 원형 경계선</b>만 추적합니다.
   </div>
 </header>
 
@@ -257,79 +257,42 @@ function toGray(data, W, H){
 }
 
 /* ==============================================================
-   완전히 개편된 정밀 윤곽선 추출 알고리즘 (V8)
+   명암 반전 및 얼룩 보정 완료 알고리즘 (V9)
 ============================================================== */
 function analyzeHoleShape(data, W, H){
   const gray = toGray(data, W, H);
 
-  // 1. 이미지 전체 명암 분석
-  let minV = 255, maxV = 0;
-  for(let i=0; i<W*H; i++){
-    if(gray[i] < minV) minV = gray[i];
-    if(gray[i] > maxV) maxV = gray[i];
-  }
+  // 1. 이미지의 중앙(Center Zone)을 기준으로 홀의 위치 고정
+  const cx = W / 2;
+  const cy = H / 2;
 
-  // 밝은 영역(홀) 마스킹
-  const thres = minV + (maxV - minV) * 0.70;
-  const binary = new Uint8Array(W * H);
-  for(let i=0; i<W*H; i++){
-    binary[i] = gray[i] >= thres ? 1 : 0;
-  }
+  // 2. 검색 반경 범위 설정 (중심부 홀 크기에 맞춰 스캔)
+  const minR = Math.min(W, H) * 0.05;  // 최소 반경
+  const maxR = Math.min(W, H) * 0.22;  // 최대 반경 (배경 노이즈로 나가는 것 제한)
 
-  // 이미지 외곽 테두리 영역 무조건 제거 (검은 테두리 왜곡 방지)
-  const margin = Math.floor(W * 0.08);
-  for(let y=0; y<H; y++){
-    for(let x=0; x<W; x++){
-      if(x < margin || x >= W - margin || y < margin || y >= H - margin){
-        binary[y*W + x] = 0;
-      }
-    }
-  }
-
-  // 2. 홀 영역의 무게중심(cx, cy) 정밀 계산
-  let sumX = 0, sumY = 0, cnt = 0;
-  for(let y=margin; y<H-margin; y++){
-    for(let x=margin; x<W-margin; x++){
-      if(binary[y*W + x] === 1){
-        sumX += x; sumY += y; cnt++;
-      }
-    }
-  }
-
-  if(cnt < 20){
-    return { found:false, cx:W>>1, cy:H>>1, roundness:0, roughness:0, chipDepth:0, burrHeight:0, edgePts:[] };
-  }
-
-  const cx = sumX / cnt;
-  const cy = sumY / cnt;
-  const approxR = Math.sqrt(cnt / Math.PI);
-
-  // 3. 72개 각도로 명암 변화율(Gradient) 기반 에지 검색 (꼬리 방지 핵심 로직)
   const NUM_ANGLES = 72;
   const edgePts = [];
   const radii = [];
 
+  // 3. 각 각도별 절대 명암 변화율(Gradient Magnitude) 탐색
   for(let i=0; i<NUM_ANGLES; i++){
     const rad = (i * 360 / NUM_ANGLES) * Math.PI / 180;
     const dx = Math.cos(rad);
     const dy = Math.sin(rad);
 
-    let foundR = approxR;
-    const minR = Math.max(3, approxR * 0.4);
-    const maxR = Math.min(approxR * 1.5, Math.min(W, H) / 2 - 10);
-
     let maxGrad = -1;
-    let bestR = approxR;
+    let bestR = (minR + maxR) / 2;
 
-    // 중심에서부터 밖으로 나가며 명암 차이가 가장 크게 발생하는 지점(Edge) 선택
     for(let r=minR; r<=maxR; r+=0.5){
       const px = Math.round(cx + dx * r);
       const py = Math.round(cy + dy * r);
       if(px < 2 || px >= W-2 || py < 2 || py >= H-2) break;
 
-      const pIn = gray[Math.round(cy + dy*(r-1.5))*W + Math.round(cx + dx*(r-1.5))];
-      const pOut = gray[Math.round(cy + dy*(r+1.5))*W + Math.round(cx + dx*(r+1.5))];
-      const grad = pIn - pOut; // 밝음 -> 어두움 경계
+      const idxIn = Math.round(cy + dy*(r-2.0))*W + Math.round(cx + dx*(r-2.0));
+      const idxOut = Math.round(cy + dy*(r+2.0))*W + Math.round(cx + dx*(r+2.0));
+      
+      // 명암의 절대 변화량 (밝음->어두움, 어두움->밝음 모두 포착)
+      const grad = Math.abs(gray[idxIn] - gray[idxOut]);
 
       if(grad > maxGrad){
         maxGrad = grad;
@@ -358,7 +321,7 @@ function analyzeHoleShape(data, W, H){
   }
 
   const roughness = Math.sqrt(varSum / NUM_ANGLES);
-  // 진원도 점수 스케일 조정 (0 ~ 1.0)
+  // 진원도 (1.0에 가까울수록 원형)
   const roundness = Math.max(0, Math.min(1.0, 1.0 - (roughness / (rMean * 0.35))));
 
   return {
